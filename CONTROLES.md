@@ -8,7 +8,7 @@ aparecieron al hacer exactamente eso.
 
 ---
 
-## 1 · `dondeBusque` rechaza rutas inventadas — ✅ medido (2026-09-17)
+## 1 · `dondeBusque` rechaza rutas inventadas —  medido (2026-09-17)
 
 `node --experimental-strip-types` sobre `src/validacion-preguntas.ts`, con un repo de prueba que
 solo contiene `src/pedidos/service.ts`, `docs/pedidos/README.md` y `decisiones.md`:
@@ -54,7 +54,7 @@ formato correcto hace que el modelo reintente al azar. El mensaje de error es pa
 
 ---
 
-## 2 · Dos corridas con el mismo recurso — ✅ medido, y encontró un bug
+## 2 · Dos corridas con el mismo recurso —  medido, y encontró un bug
 
 Dos procesos declarando `postgres-local`, el primero reteniéndolo 4 segundos.
 
@@ -95,7 +95,7 @@ reempieza, el problema no es el campo sino que el `resume` no está trayendo la 
 
 ---
 
-## 4 · Ids de tarea de la spec — ✅ medido (2026-09-17)
+## 4 · Ids de tarea de la spec —  medido (2026-09-17)
 
 `validarIdsTarea` contra un `tareas.md` con T-01, T-02 y T-03:
 
@@ -111,7 +111,7 @@ reporte.
 
 ---
 
-## 5 · Ids de decisión únicos por feature — ✅ medido, después de un bug
+## 5 · Ids de decisión únicos por feature —  medido, después de un bug
 
 El generador original hacía `tareaId.slice(0, 12)`, y ese recorte caía **dentro del nombre de la
 feature**: todas las corridas de `publicaciones` producían la misma serie de ids, así que las
@@ -131,7 +131,7 @@ mismo turno no reciban el mismo número.
 
 ---
 
-## 6 · El canal de consola — ✅ medido, tres veces, dos arreglos fallidos
+## 6 · El canal de consola —  medido, tres veces, dos arreglos fallidos
 
 El síntoma: respuestas de 900 caracteres registradas con 112, con el texto cortado a mitad de
 palabra. El control fue comparar lo pegado contra lo guardado en `decisiones.md` **y** en el JSON
@@ -160,7 +160,7 @@ descartar la escritura como causa en un minuto, dos veces.
 
 ---
 
-## 7 · El canal de Telegram — ✅ medido, dos bugs
+## 7 · El canal de Telegram —  medido, dos bugs
 
 **Bug 1: mensajes viejos tomados como respuesta.** Al reescribir el canal para aceptar cualquier
 texto del chat, se perdió el paso que descartaba la cola pendiente antes de preguntar. Resultado: la
