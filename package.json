@@ -1,0 +1,26 @@
+{
+  "name": "orquestador-agentes",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Orquestador multi-agente configurable por proyecto sobre el Claude Agent SDK",
+  "scripts": {
+    "tarea": "tsx src/index.ts",
+    "init": "tsx src/init.ts",
+    "listar": "tsx src/index.ts --listar",
+    "typecheck": "tsc --noEmit",
+    "reanudar": "tsx src/reanudar.ts"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
