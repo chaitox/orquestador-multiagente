@@ -52,6 +52,8 @@ export class Buzon {
 
 export interface Trabajo {
   tipo: "solicitud" | "retorno";
+  /** true cuando este trabajo es el recordatorio de cierre: no se repite */
+  recordatorioDeCierre?: boolean;
   agente: string;
   solicitud?: Solicitud;
   entrega?: Entrega;
