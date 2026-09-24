@@ -1,12 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import type { Buzon } from "./buzon.js";
 import { DIR_PROMPTS } from "./config.js";
 import { leerDecisiones } from "./decisiones.js";
-import type { Canal } from "./canal.js";
-import { HERRAMIENTAS_COORDINACION, SERVIDOR, servidorDe, type ContadorPreguntas } from "./herramientas.js";
-import { guardia } from "./permisos.js";
 import type { AgenteResuelto, ProyectoResuelto } from "./tipos.js";
 
 export interface ResultadoEjecucion {
@@ -16,8 +11,6 @@ export interface ResultadoEjecucion {
   textoFinal?: string;
   error?: string;
 }
-
-const LECTURA = ["Read", "Glob", "Grep"];
 
 /** Bloque que el orquestador genera solo, a partir del config: el agente no lo escribe. */
 function bloqueCoordinacion(p: ProyectoResuelto, a: AgenteResuelto, feature: string): string {
@@ -77,36 +70,10 @@ function bloqueCoordinacion(p: ProyectoResuelto, a: AgenteResuelto, feature: str
     .join("\n");
 }
 
-export function opcionesDe(
-  p: ProyectoResuelto,
-  a: AgenteResuelto,
-  buzon: Buzon,
-  feature: string,
-  canal: Canal,
-  contador: ContadorPreguntas,
-  tareaId: string,
-  resume?: string,
-): Options {
+/** Lo que se agrega al system prompt del agente: coordinación + su prompt propio. */
+export function instruccionesDe(p: ProyectoResuelto, a: AgenteResuelto, feature: string): string {
   const propio = fs.readFileSync(path.join(DIR_PROMPTS, a.prompt), "utf8");
-
-  return {
-    cwd: a.raiz,
-    model: a.modelo,
-    resume,
-    maxTurns: p.maxTurnos,
-    // Carga CLAUDE.md, .claude/rules, .claude/skills y .claude/agents desde cwd (la raíz del agente)
-    settingSources: a.ajustes,
-    systemPrompt: {
-      type: "preset",
-      preset: "claude_code",
-      append: `${bloqueCoordinacion(p, a, feature)}\n\n${propio}`,
-    },
-    additionalDirectories: a.lecturaExtra,
-    mcpServers: { [SERVIDOR]: servidorDe(p, a, buzon, feature, canal, contador, tareaId) },
-    // Lo que está acá se aprueba solo; Write/Edit/Bash pasan por la guardia.
-    allowedTools: [...LECTURA, ...HERRAMIENTAS_COORDINACION],
-    canUseTool: guardia(a),
-  };
+  return `${bloqueCoordinacion(p, a, feature)}\n\n${propio}`;
 }
 
 const COLORES = ["\x1b[36m", "\x1b[35m", "\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[31m"];
@@ -120,46 +87,14 @@ function tag(id: string): string {
   return `${colorPorAgente.get(id)}[${id}]${RESET}`;
 }
 
-export async function ejecutarAgente(
-  agenteId: string,
-  prompt: string,
-  options: Options,
-): Promise<ResultadoEjecucion> {
+/** Log por agente, con un color fijo por id. */
+export function logDe(agenteId: string) {
   const t = tag(agenteId);
-  const resultado: ResultadoEjecucion = { ok: false, costoUsd: 0 };
-
-  try {
-    for await (const msg of query({ prompt, options })) {
-      switch (msg.type) {
-        case "system":
-          if (msg.subtype === "init") resultado.sessionId = msg.session_id;
-          break;
-
-        case "assistant":
-          for (const bloque of msg.message.content) {
-            if (bloque.type === "text" && bloque.text.trim()) {
-              console.log(`${t} ${bloque.text.trim()}`);
-            } else if (bloque.type === "tool_use") {
-              console.log(`${t} → ${bloque.name} ${resumirInput(bloque.input)}`);
-            }
-          }
-          break;
-
-        case "result":
-          resultado.sessionId = msg.session_id;
-          resultado.costoUsd = msg.total_cost_usd ?? 0;
-          resultado.ok = msg.subtype === "success";
-          if (msg.subtype === "success") resultado.textoFinal = msg.result;
-          else resultado.error = msg.subtype;
-          break;
-      }
-    }
-  } catch (e) {
-    resultado.error = e instanceof Error ? e.message : String(e);
-  }
-
-  if (resultado.error) console.error(`${t} ✗ ${resultado.error}`);
-  return resultado;
+  return {
+    texto: (texto: string) => console.log(`${t} ${texto.trim()}`),
+    herramienta: (nombre: string, input: unknown) => console.log(`${t} → ${nombre} ${resumirInput(input)}`),
+    error: (error: string) => console.error(`${t} ✗ ${error}`),
+  };
 }
 
 function resumirInput(input: unknown): string {

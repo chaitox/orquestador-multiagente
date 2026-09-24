@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import type { AgenteResuelto } from "./tipos.js";
 
 const ESCRITURA = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
@@ -20,11 +19,15 @@ function dentroDe(archivo: string, carpeta: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
+export type DecisionPermiso = { permitir: true } | { permitir: false; mensaje: string };
+
 /**
- * Se ejecuta para toda herramienta que NO esté en allowedTools.
- * Por eso Write/Edit/Bash quedan fuera de allowedTools: así siempre pasan por acá.
+ * Decide si una llamada a herramienta se ejecuta. El motor la consulta antes de cada
+ * llamada que no esté aprobada de antemano (en Claude, vía canUseTool).
  */
-export function guardia(agente: AgenteResuelto): CanUseTool {
+export function guardia(
+  agente: AgenteResuelto,
+): (herramienta: string, input: Record<string, unknown>) => Promise<DecisionPermiso> {
   const prohibidos: Array<[RegExp, string]> = [
     ...BASH_PROHIBIDO,
     ...(agente.bashProhibido ?? []).map((r) => [r, "prohibido por la config del proyecto"] as [RegExp, string]),
@@ -36,7 +39,7 @@ export function guardia(agente: AgenteResuelto): CanUseTool {
       const absoluto = path.resolve(agente.raiz, destino);
       if (!dentroDe(absoluto, agente.raiz)) {
         console.warn(`[${agente.id}] ✋ escritura fuera de su raíz: ${absoluto}`);
-        return { behavior: "deny", message: `Solo podés escribir dentro de ${agente.raiz}.` };
+        return { permitir: false, mensaje: `Solo podés escribir dentro de ${agente.raiz}.` };
       }
     }
 
@@ -45,11 +48,11 @@ export function guardia(agente: AgenteResuelto): CanUseTool {
       for (const [patron, motivo] of prohibidos) {
         if (patron.test(comando)) {
           console.warn(`[${agente.id}] ✋ comando bloqueado (${motivo}): ${comando}`);
-          return { behavior: "deny", message: `Comando no permitido: ${motivo}.` };
+          return { permitir: false, mensaje: `Comando no permitido: ${motivo}.` };
         }
       }
     }
 
-    return { behavior: "allow", updatedInput: input };
+    return { permitir: true };
   };
 }

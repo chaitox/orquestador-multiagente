@@ -1,4 +1,4 @@
-import { ejecutarAgente, opcionesDe, type ResultadoEjecucion } from "./agentes.js";
+import type { ResultadoEjecucion } from "./agentes.js";
 import { esSensible, pedirAprobacion } from "./aprobacion.js";
 import {
   Buzon,
@@ -21,6 +21,7 @@ import { adquirir, liberar } from "./recursos.js";
 import type { AgenteResuelto, ProyectoResuelto } from "./tipos.js";
 import { registrarDecision } from "./decisiones.js";
 import { verificar } from "./verificacion.js";
+import { ejecutarAgente, opcionesDe } from "./motores/claude.js";
 
 interface Opciones {
   descripcion: string;

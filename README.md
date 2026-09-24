@@ -59,7 +59,8 @@ inventado con total seguridad produce una medición que parece una respuesta.
   multiplica los accidentes.
 - **No hay planificador de tareas**: corre una por invocación.
 - **Solo funciona con el Claude Agent SDK.** La coordinación, los contratos y las reglas son
-  independientes del motor, pero el código que ejecuta agentes todavía no está abstraído.
+  independientes del motor, y todo lo que habla con el SDK está en un solo archivo, pero no hay
+  una segunda implementación. Ver [Cómo agregar un motor](#cómo-agregar-un-motor).
 - **No automatiza la crítica.** Detecta que un gate falló, no que un test verifica un camino
   inexistente. Eso lo sigue haciendo una persona leyendo el reporte.
 
@@ -71,6 +72,25 @@ inventado con total seguridad produce una medición que parece una respuesta.
 - **Scaffolding:** `npm run init` crea el proyecto con el generador oficial de cada stack, en `@latest`.
 - **Spec-driven opcional:** si el proyecto declara una carpeta de specs, las entregas tienen que
   citar ids de tarea que existan.
+
+## Cómo agregar un motor
+
+Hoy el único motor es el Claude Agent SDK, y todo lo que lo usa está en
+[`src/motores/claude.ts`](./src/motores/claude.ts). Lo demás (el bloque de coordinación, las
+herramientas, la guardia de permisos, los contratos) no sabe qué motor lo ejecuta. Si querés
+sumar otro (Gemini, Ollama, Codex…), se escribe un archivo nuevo al lado,
+`src/motores/<motor>.ts`. No hay una interfaz para implementar todavía: va a salir de comparar
+dos motores reales, no de adivinar a partir de uno solo.
+
+El motor tiene que resolver tres cosas:
+
+| Capacidad | Para qué | Qué se pierde si falta |
+|---|---|---|
+| **Ejecutar con herramientas propias** | Exponer `preguntar`, `solicitar_a`, `entrega_lista`, `tarea_completa` y `no_se_puede` (están en `herramientasDe`, sin atarse a ningún motor) | Todo: sin ellas no hay preguntas, solicitudes ni contratos. Es el mínimo. |
+| **Retomar una sesión previa** (`resume`) | Volver al agente con la respuesta a su pregunta o a su solicitud sin rearmar el contexto | Cada retoma empieza de cero: hay que reinyectar el historial, cuesta más y se pierde lo que el agente ya había leído. |
+| **Interceptar cada llamada a herramienta antes de ejecutarla** (`canUseTool`) | Aplicar la `guardia`: no escribir fuera de su carpeta, no correr comandos prohibidos | La guardia de permisos. La alternativa es aislar al agente en un contenedor con solo su carpeta montada. |
+
+Es una invitación a contribuir, no una promesa: ningún otro motor está probado.
 
 ## Documentación
 

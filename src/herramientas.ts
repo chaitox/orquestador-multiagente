@@ -1,4 +1,3 @@
-import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import path from "node:path";
 import { z } from "zod";
 import type { Buzon } from "./buzon.js";
@@ -25,8 +24,6 @@ export class ContadorPreguntas {
   }
 }
 
-export const SERVIDOR = "coordinacion";
-
 /**
  * Un agente puede llamar a preguntar varias veces en el mismo turno (la fase 0 lo pide).
  * Sin esto, dos handlers esperan a la vez sobre el mismo stdin / el mismo polling de
@@ -39,9 +36,31 @@ function enFila<T>(fn: () => Promise<T>): Promise<T> {
   colaPreguntas = siguiente.catch(() => undefined);
   return siguiente;
 }
-export const nombreMcp = (h: string) => `mcp__${SERVIDOR}__${h}`;
 
-const texto = (mensaje: string, esError = false) => ({
+/** Resultado de una herramienta, con la forma de MCP: texto para el agente y si es un error. */
+export type ResultadoHerramienta = {
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+};
+
+/** Una herramienta de coordinación, sin atarla a ningún motor: cada motor la expone a su manera. */
+export interface Herramienta {
+  nombre: string;
+  descripcion: string;
+  esquema: z.ZodRawShape;
+  ejecutar: (args: any) => Promise<ResultadoHerramienta>;
+}
+
+function herramienta<S extends z.ZodRawShape>(
+  nombre: string,
+  descripcion: string,
+  esquema: S,
+  ejecutar: (args: z.infer<z.ZodObject<S>>) => Promise<ResultadoHerramienta>,
+): Herramienta {
+  return { nombre, descripcion, esquema, ejecutar };
+}
+
+const texto = (mensaje: string, esError = false): ResultadoHerramienta => ({
   content: [{ type: "text" as const, text: mensaje }],
   isError: esError,
 });
@@ -50,7 +69,7 @@ const texto = (mensaje: string, esError = false) => ({
  * Cada agente recibe el mismo juego de herramientas; lo que cambia son los destinos
  * posibles y el contrato que se le exige al cerrar.
  */
-export function servidorDe(
+export function herramientasDe(
   proyecto: ProyectoResuelto,
   agente: AgenteResuelto,
   buzon: Buzon,
@@ -87,11 +106,8 @@ export function servidorDe(
   };
   const listaDestinos = otros.map((a) => `"${a.id}" (${a.descripcion})`).join(", ");
 
-  return createSdkMcpServer({
-    name: SERVIDOR,
-    version: "1.0.0",
-    tools: [
-      tool(
+  return [
+      herramienta(
         "preguntar",
         "Preguntar a la persona a cargo y ESPERAR la respuesta. NO es para dudas vagas: es para lo que no " +
         "podés saber porque no está escrito en ningún lado. Obligatorio antes de inventar: " +
@@ -206,7 +222,7 @@ export function servidorDe(
         },
       ),
 
-      tool(
+      herramienta(
         "solicitar_a",
         `Pedir trabajo a otro agente del proyecto cuando el problema no es de tu parte. Destinos: ${listaDestinos}. ` +
         "Podés pedir a varios en el mismo turno (uno por destino). Después de pedir, terminá tu turno.",
@@ -241,7 +257,7 @@ export function servidorDe(
         },
       ),
 
-      tool(
+      herramienta(
         "entrega_lista",
         "Cerrar la solicitud que estás atendiendo. Se valida contra el contrato configurado del proyecto.",
         {
@@ -291,7 +307,7 @@ export function servidorDe(
         },
       ),
 
-      tool(
+      herramienta(
         "tarea_completa",
         "Marcar tu parte de la tarea como terminada. Solo si compila y las verificaciones pasan.",
         { resumen: z.string().min(20).describe("Qué quedó hecho y qué queda pendiente, si algo") },
@@ -305,7 +321,7 @@ export function servidorDe(
         },
       ),
 
-      tool(
+      herramienta(
         "no_se_puede",
         "Usar cuando hace falta una decisión humana (reglas de negocio, datos que faltan) o la solicitud es inviable.",
         { motivo: z.string().min(20).describe("Por qué no se puede y qué decisión o dato falta") },
@@ -314,14 +330,5 @@ export function servidorDe(
           return texto("Bloqueo registrado. Terminá tu turno sin hacer más cambios.");
         },
       ),
-    ],
-  });
+  ];
 }
-
-export const HERRAMIENTAS_COORDINACION = [
-  nombreMcp("preguntar"),
-  nombreMcp("solicitar_a"),
-  nombreMcp("entrega_lista"),
-  nombreMcp("tarea_completa"),
-  nombreMcp("no_se_puede"),
-];
