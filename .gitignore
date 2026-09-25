@@ -1,0 +1,8 @@
+/proyecto
+.env
+.env.*
+!.env.example
+node_modules
+.orquestador
+dist
+.DS_Store
