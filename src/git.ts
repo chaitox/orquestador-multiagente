@@ -32,13 +32,50 @@ export function estaLimpio(repo: string): boolean {
   return archivosModificados(repo).length === 0;
 }
 
+/** Rama base del repo: main, o master si no hay main */
+function ramaBase(repo: string): string | null {
+  for (const candidata of ["main", "master"]) {
+    if (git(repo, ["branch", "--list", candidata]) !== "") return candidata;
+  }
+  return null;
+}
+
+/**
+ * Deja el repo en `rama`, creándola desde la base si no existe y **poniéndola al día
+ * con la base si ya existía**. Sin esto, una rama creada antes de un merge deja al
+ * agente trabajando contra código viejo: medido — un agente no encontró un archivo que
+ * ya estaba en main porque su rama era anterior al merge.
+ */
 export function asegurarRama(repo: string, rama: string) {
-  if (ramaActual(repo) === rama) return;
   if (!estaLimpio(repo)) {
     throw new Error(`${repo} tiene cambios sin commitear; limpialo antes de pasar a ${rama}`);
   }
+
+  const base = ramaBase(repo);
   const existe = git(repo, ["branch", "--list", rama]) !== "";
-  git(repo, existe ? ["checkout", rama] : ["checkout", "-b", rama]);
+
+  if (!existe) {
+    if (base && ramaActual(repo) !== base) git(repo, ["checkout", base]);
+    git(repo, ["checkout", "-b", rama]);
+    return;
+  }
+
+  if (ramaActual(repo) !== rama) git(repo, ["checkout", rama]);
+
+  // Poner la rama al día con la base, si quedó atrás
+  if (base && base !== rama) {
+    const atrasada = git(repo, ["rev-list", "--count", `${rama}..${base}`]);
+    if (atrasada !== "0") {
+      console.log(`   ↻ ${repo}: ${rama} estaba ${atrasada} commits atrás de ${base}, se actualiza`);
+      try {
+        git(repo, ["merge", base, "-m", `actualiza ${rama} con ${base}`]);
+      } catch {
+        throw new Error(
+          `No se pudo actualizar ${rama} con ${base} en ${repo}: hay conflictos. Resolvelos a mano antes de seguir.`,
+        );
+      }
+    }
+  }
 }
 
 /** Marca que lleva el commit de rescate de una tarea que no llegó a cerrar */
