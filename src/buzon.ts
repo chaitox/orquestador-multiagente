@@ -51,6 +51,7 @@ export class Buzon {
 }
 
 export interface Trabajo {
+  [x: string]: any;
   tipo: "solicitud" | "retorno";
   agente: string;
   solicitud?: Solicitud;

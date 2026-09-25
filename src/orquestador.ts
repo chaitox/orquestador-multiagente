@@ -1,4 +1,5 @@
-import type { ResultadoEjecucion } from "./agentes.js";
+import fs from "node:fs";
+import path from "node:path";
 import { esSensible, pedirAprobacion } from "./aprobacion.js";
 import {
   Buzon,
@@ -11,17 +12,21 @@ import {
 } from "./buzon.js";
 import type { Canal } from "./canal.js";
 import { obtenerCanal } from "./canales/index.js";
-import { buscarAgente } from "./config.js";
-import fs from "node:fs";
-import path from "node:path";
-import { DIR_ESTADO } from "./config.js";
+import { buscarAgente, DIR_ESTADO } from "./config.js";
+import { registrarDecision } from "./decisiones.js";
+import {
+  asegurarRama,
+  commitTodo,
+  esRepo,
+  estaLimpio,
+  MARCA_SIN_VERIFICAR,
+  ultimoCommitSinVerificar,
+} from "./git.js";
 import { ContadorPreguntas } from "./herramientas.js";
-import { asegurarRama, commitTodo, esRepo, estaLimpio } from "./git.js";
+import { ejecutarAgente, opcionesDe, type ResultadoEjecucion } from "./motores/claude.js";
 import { adquirir, liberar } from "./recursos.js";
 import type { AgenteResuelto, ProyectoResuelto } from "./tipos.js";
-import { registrarDecision } from "./decisiones.js";
 import { verificar } from "./verificacion.js";
-import { ejecutarAgente, opcionesDe } from "./motores/claude.js";
 
 interface Opciones {
   descripcion: string;
@@ -45,11 +50,36 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
   const canal = obtenerCanal(p.preguntas.canal);
   const contador = new ContadorPreguntas(p.preguntas.maxPorTarea);
 
+  const sinVerificar = [...new Set(p.agentes.map((a) => a.repo))].filter(
+    (r) => esRepo(r) && ultimoCommitSinVerificar(r),
+  );
+  for (const repo of sinVerificar) {
+    console.warn(
+      `\x1b[33m⚠ el último commit de ${repo} quedó SIN VERIFICAR: una tarea anterior se detuvo ` +
+      `antes de cerrar. Revisalo antes de avanzar.\x1b[0m`,
+    );
+  }
+
   prepararRepos(p, estado, o.feature);
 
   const cola: Trabajo[] = o.continuar
     ? [{ ...o.continuar.trabajo, tipo: "retorno", mensaje: o.continuar.mensaje, solicitud: undefined }, ...o.continuar.cola]
-    : [{ tipo: "retorno", agente: inicial.id, mensaje: promptInicial(o) }];
+    : [
+      {
+        tipo: "retorno",
+        agente: inicial.id,
+        mensaje: promptInicial(
+          o,
+          sinVerificar.length > 0
+            ? "AVISO: el último commit de " +
+            sinVerificar.join(", ") +
+            " está marcado SIN-VERIFICAR: una tarea anterior se detuvo antes de cerrar, así que ese " +
+            "trabajo nunca pasó el contrato ni las verificaciones. Revisalo antes de avanzar: si está " +
+            "bien, cerralo como corresponde; si le falta algo, completalo.\n\n"
+            : "",
+        ),
+      },
+    ];
 
   if (o.continuar) {
     estado.solicitudes = o.continuar.solicitudes;
@@ -65,6 +95,18 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
     estado.estado = "detenida";
     estado.motivo = motivo;
     registrar(estado, "detenida", motivo);
+
+    // El trabajo hecho no se pierde, pero el commit dice que NO pasó el contrato ni
+    // las verificaciones: si no, la próxima corrida lo da por bueno.
+    if (p.git.commitAlCerrar) {
+      for (const repo of [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo)) {
+        const rescatado = commitTodo(repo, `${MARCA_SIN_VERIFICAR}: la tarea se detuvo antes de cerrar — ${motivo.slice(0, 80)}`);
+        if (rescatado) {
+          console.warn(`\x1b[33m   ⚠ trabajo sin verificar commiteado en ${repo}\x1b[0m`);
+          registrar(estado, "rescate", repo);
+        }
+      }
+    }
   };
 
   while (cola.length > 0 && estado.estado === "en_curso") {
@@ -106,6 +148,11 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
         detener(`Se alcanzó el máximo de ${p.maxSolicitudes} solicitudes. Última: ${sol.id}`);
         break;
       }
+      if (esSensible(p, sol)) {
+        console.log(
+          `\x1b[33m⏸  esperando tu aprobación: solicitud ${sol.id} de "${sol.origen}" para "${sol.destino}"\x1b[0m`,
+        );
+      }
       if (esSensible(p, sol) && !(await pedirAprobacion(sol, canal, p.preguntas.timeoutMin))) {
         registrar(estado, "solicitud_rechazada", sol.id);
         cola.push({
@@ -119,6 +166,7 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
       }
       estado.solicitudes += 1;
       registrar(estado, "solicitud", sol);
+      console.log(`\x1b[36m▶  ${sol.destino} va a atender ${sol.id} (pedido por ${sol.origen})\x1b[0m`);
       cola.push({ tipo: "solicitud", agente: sol.destino, solicitud: sol });
     }
 
@@ -154,7 +202,25 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
     }
 
     if (!buzon.entrega && !buzon.completa && buzon.solicitudes.length === 0 && !buzon.bloqueo) {
-      detener(`"${agente.id}" terminó sin cerrar nada (ni entrega_lista, ni tarea_completa, ni solicitar_a)`);
+      // Antes de detener toda la tarea, se le da UN turno para que cierre. Relanzar
+      // desde cero cuesta mucho más que este recordatorio.
+      if (!trabajo.recordatorioDeCierre) {
+        registrar(estado, "recordatorio_de_cierre", agente.id);
+        console.log(`\x1b[33m   ↻ ${agente.id} terminó sin cerrar: se le recuerda una vez\x1b[0m`);
+        cola.unshift({
+          ...trabajo,
+          tipo: "retorno",
+          recordatorioDeCierre: true,
+          mensaje:
+            "Terminaste tu turno sin usar ninguna herramienta de cierre. No repitas el trabajo: " +
+            "cerrá ahora con tarea_completa (o entrega_lista si estabas atendiendo una solicitud). " +
+            "Si el contrato te rechaza el cierre porque tu trabajo no toca lo que exige — por ejemplo " +
+            "un ajuste menor sin cambio de contrato — NO fabriques un cambio: cerrá con no_se_puede " +
+            "explicando exactamente eso. Es una salida válida y esperada.",
+        });
+        continue;
+      }
+      detener(`"${agente.id}" terminó sin cerrar nada, ni siquiera tras el recordatorio`);
     }
   }
 
@@ -170,7 +236,7 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
   if (p.preguntas.avisarFin && estado.estado !== "aparcada") {
     await canal.avisar(
       `${estado.estado === "completada" ? "✅" : "⛔"} ${p.nombre}/${o.feature}: ${estado.estado}` +
-        (estado.motivo ? `\n${estado.motivo}` : ""),
+      (estado.motivo ? `\n${estado.motivo}` : ""),
     );
   }
 
@@ -261,8 +327,9 @@ async function correrConVerificacion(
 
 /* ------------------------------ prompts ------------------------------ */
 
-const promptInicial = (o: Opciones) =>
+const promptInicial = (o: Opciones, avisoSinVerificar: string) =>
   `Tarea (feature "${o.feature}"):\n${o.descripcion}\n\n` +
+  avisoSinVerificar +
   "Si algo depende de otro agente, pedíselo con solicitar_a. Cuando tu parte esté terminada, usá tarea_completa.";
 
 const promptSolicitud = (s: Solicitud) =>
@@ -296,6 +363,17 @@ const promptRetorno = (e: { solicitudId: string; resumen: string; archivos: stri
 /* -------------------------------- git -------------------------------- */
 
 function prepararRepos(p: ProyectoResuelto, estado: EstadoTarea, feature: string) {
+  // Un repo que no es repo se saltea en silencio y el agente trabaja sin rama ni commits:
+  // medido, el trabajo de un agente entero vivió solo en el árbol de archivos.
+  for (const a of p.agentes) {
+    if (!esRepo(a.repo)) {
+      console.warn(
+        `\x1b[33m⚠ "${a.id}" no está en un repositorio git (${a.repo}): su trabajo NO se va a versionar ` +
+        `ni commitear. Corré 'git init' ahí antes de seguir.\x1b[0m`,
+      );
+    }
+  }
+
   const repos = [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo);
 
   for (const repo of repos) {

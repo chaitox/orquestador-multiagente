@@ -119,3 +119,5 @@ export async function ejecutarAgente(
   if (resultado.error) log.error(resultado.error);
   return resultado;
 }
+
+export { ResultadoEjecucion };

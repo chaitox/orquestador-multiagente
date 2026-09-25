@@ -41,6 +41,18 @@ export function asegurarRama(repo: string, rama: string) {
   git(repo, existe ? ["checkout", rama] : ["checkout", "-b", rama]);
 }
 
+/** Marca que lleva el commit de rescate de una tarea que no llegó a cerrar */
+export const MARCA_SIN_VERIFICAR = "SIN-VERIFICAR";
+
+/** true si el último commit del repo es un rescate que nunca pasó el contrato */
+export function ultimoCommitSinVerificar(repo: string): boolean {
+  try {
+    return git(repo, ["log", "-1", "--format=%s"]).includes(MARCA_SIN_VERIFICAR);
+  } catch {
+    return false;
+  }
+}
+
 export function commitTodo(repo: string, mensaje: string): boolean {
   if (estaLimpio(repo)) return false;
   git(repo, ["add", "-A"]);
