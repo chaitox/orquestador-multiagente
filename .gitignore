@@ -1,4 +1,4 @@
-/proyecto
+
 .env
 .env.*
 !.env.example
