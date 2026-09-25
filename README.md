@@ -93,7 +93,6 @@ El motor tiene que resolver tres cosas:
 Es una invitación a contribuir, no una promesa: ningún otro motor está probado.
 
 ## Documentación
-
 - [TUTORIAL.md](./TUTORIAL.md) — crear un proyecto de cero, paso a paso, con lo que se aprendió
   usándolo en un proyecto real: costos, tamaño de las tareas y los tropiezos.
 - [MANUAL.md](./MANUAL.md) — referencia completa del config y de cada mecanismo.
