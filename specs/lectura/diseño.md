@@ -50,8 +50,10 @@ tarea en curso congelada, que es exactamente el bug que la fase 2 va a venir a e
 
 Cargar `proyectos/<nombre>.ts` es un `import()` que **ejecuta** el archivo, y `resolver()` en
 `src/config.ts:78` tira si la raíz del agente no existe (`exigirRaices`) o si falta su prompt.
-Con el disco real, `ejemplo-pedidos` y `ejemplo-spec` apuntan a `~/dev/pedidos` y `~/dev/demo`,
-que no existen.
+Con el disco real, los **tres** proyectos de ejemplo apuntan a raíces que no existen:
+`ejemplo-pedidos` a `~/dev/pedidos`, `ejemplo-spec` a `~/dev/demo` y `ejemplo-python-react` a
+`~/dev/plataforma` (no existe ni `~/dev`). O sea que la raíz inexistente es el caso común entre
+los proyectos de ejemplo, no la excepción de uno.
 
 **Decidido:** se carga con `exigirRaices: false`, y aun así cada proyecto se carga dentro de su
 propio `try`. Un proyecto que explota al cargar aparece en la lista con su error como dato, y
@@ -98,8 +100,15 @@ y el manual ya pide no multiplicar configuración.
 
 El `decisiones.md` que genera `src/decisiones.ts:21` tiene un formato fijo
 (`## <id> — <fecha>`, `**Pregunta** (<agente>, tarea <t>): …`, `**Respuesta:** …`), pero los
-archivos reales se editan a mano: el de `inmobiliaria` tiene encabezados como
-`## DEC-publicacione-1 (tipos) — 2026-09-17`, que no matchean.
+archivos reales se editan a mano y dejan de matchear.
+
+**Ojo con lo que hay en este repo:** el único `decisiones.md` acá es el de la raíz, y está en
+formato generado (es el que resuelve `interfaz`, con `raiz: "."`). El archivo de `inmobiliaria`,
+que es el que está editado a mano, vive en la otra copia del repo (ver **DEC-lectura-02**) y
+además `inmobiliaria` no tiene config, así que **no hay raíz que resolver y la API no lo sirve
+nunca**. El parseo tolerante sigue siendo obligatorio —los archivos editados a mano son lo
+normal, no el borde— pero no se puede verificar contra `inmobiliaria`: se verifica con el
+fixture de D-11.
 
 **Decidido:** el servidor devuelve el markdown crudo completo **y** un índice de entradas
 parseado de forma tolerante — toda sección `## ` es una entrada; su id es el primer token, y
@@ -131,6 +140,52 @@ Los JSON en disco vienen de versiones distintas: los de septiembre no tienen
 la web recibe siempre la misma forma y no tiene condicionales por versión. Un archivo que ni
 siquiera es JSON válido se reporta como una entrada en error dentro de la lista, sin tumbar
 las otras 40.
+
+La forma de `pendiente` se respeta tal como la escribe el orquestador, **anidada**:
+`src/buzon.ts:77` la declara como `{ pregunta: Pregunta; trabajo: Trabajo }`, y los campos que
+la pantalla necesita (`porQue`, `dondeBusque`, `opciones`, `recomendacion`) están adentro de
+`pregunta` (`src/canal.ts:1`), no al tope. No se aplana: si la web los busca un nivel más arriba
+no los encuentra.
+
+### D-11 · Los casos que no están en disco se prueban con fixtures, nunca mutando datos reales
+
+Varios requisitos cubren casos que **no existen** en el disco de este repo. Verificado archivo
+por archivo sobre los 49 JSON que había en `.orquestador/` al escribir esta spec: ninguno está
+`aparcada`, ninguno tiene `pendiente`, ninguno tiene el historial vacío y ninguno es JSON
+inválido. Los estados que sí hay son `completada`, `detenida` y `en_curso`.
+
+**Decidido:** esos casos se verifican con proyectos de fixture, carpetas
+`.orquestador/fixture-<caso>/` con JSON escritos a mano para el caso. Se crean para la
+verificación y se borran al terminar. Funciona sin agregarle nada al servidor porque el
+inventario es la unión de config y estado (D-1): una carpeta en `.orquestador/` ya aparece como
+proyecto sin config, que es justo el camino que se quiere ejercitar.
+
+Dos consecuencias que hay que respetar:
+
+- **Ningún criterio de aceptación se verifica editando, renombrando o corrompiendo un archivo
+  real de `.orquestador/`.** `.orquestador` está en `.gitignore`: esos JSON no están versionados,
+  y los 41 de `inmobiliaria` son historial de corridas que no se puede volver a generar. Un
+  `git checkout` no los trae de vuelta porque git nunca los tuvo.
+- Mientras exista una carpeta de fixture, el inventario trae más de seis proyectos. Los
+  criterios que cuentan seis valen con el disco limpio, sin fixtures.
+
+**El caso de `decisiones.md` va aparte.** Un fixture de decisiones no alcanza con una carpeta en
+`.orquestador/`: para que la API sirva un `decisiones.md` hace falta un proyecto **con config**,
+porque la raíz sale de ahí, y crear un `proyectos/*.ts` cae fuera de la carpeta del agente que
+implementa. Así que se parte en dos: el parseo tolerante es una función pura sobre el texto del
+markdown y se verifica contra un archivo de muestra en `servidor/fixtures/`, dentro de la carpeta
+del agente; el cableado del endpoint se verifica con los cuatro casos que el disco **sí** da —
+`interfaz` (config con `raiz: "."`, sirve el `decisiones.md` de la raíz del repo), `prueba`
+(config con raíz existente, `/tmp/prueba-orq`, y sin `decisiones.md`), `inmobiliaria` (sin
+config, sin raíz que resolver) y `ejemplo-spec` (config con raíz inexistente).
+
+**Descartado:** darle al servidor una variable para apuntar `.orquestador/` a otra carpeta en
+las pruebas. Es configuración nueva que después hay que mantener sincronizada, y el manual pide
+no multiplicar configuración (igual que en D-7).
+
+**Descartado:** tocar los archivos reales y revertirlos después. Es la opción que el texto
+anterior de esta spec dejaba abierta, y es la que pierde datos: sin versionado, un revert mal
+hecho no tiene vuelta.
 
 ---
 

@@ -78,7 +78,8 @@ El contenido protagonista. Se ve, para una tarea:
   completada.
 - **Pregunta pendiente**: si la tarea quedó aparcada esperando una respuesta, se ve la
   pregunta con su `porQue`, su `dondeBusque`, sus opciones y su recomendación. Se muestra;
-  no se contesta desde acá (eso es fase 3).
+  no se contesta desde acá (eso es fase 3). Esos campos viven anidados dentro de
+  `pendiente.pregunta`, no al tope de `pendiente` (ver D-10).
 
 **Observable:** abrir `inmobiliaria / publicaciones-2026-09-23T16-34-01-763Z` muestra los 3
 eventos de su historial, US$ 6.42 y las 3 ramas de sus repos.
@@ -103,6 +104,11 @@ La API no expone ningún verbo que modifique, y la web no tiene ningún control 
 
 **Observable:** con la interfaz abierta y navegada por todas las pantallas, `git status` sigue
 limpio y la fecha de modificación de los archivos de `.orquestador/` no cambia.
+
+Las dos mitades de ese observable no son redundantes y conviene no confundirlas: `.orquestador`
+está en `.gitignore`, así que **`git status` no ve nada de lo que pase ahí adentro**. Lo que
+prueba que la interfaz no escribió el estado es la comparación de fechas de modificación; el
+`git status` cubre el resto del repo.
 
 ## R-07 · La interfaz no estorba a las corridas
 
@@ -132,6 +138,11 @@ pantalla ni la lista entera.
 
 **Observable:** la lista de tareas de `inmobiliaria` carga completa aunque ninguno de sus 41
 archivos tenga `reposParticipantes`.
+
+De estos casos, los que **no están** en el disco de este repo son: una tarea `aparcada`, una con
+`pendiente`, una con historial vacío y un JSON inválido. Se verifican con los fixtures de
+**D-11**, y nunca editando ni corrompiendo un archivo real de `.orquestador/`: no están
+versionados, así que lo que se rompe ahí no se recupera.
 
 ## R-10 · Estados de carga, vacío y error
 
