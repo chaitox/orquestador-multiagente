@@ -155,6 +155,24 @@ Cada uno tiene su `detalle` con forma propia y la web los presenta distinto. Un 
 nombre que no está en esa lista —porque el orquestador sumó uno— se muestra genérico: fecha,
 nombre y su detalle en crudo. Nunca se descarta ni rompe la vista.
 
+**Seis de los trece tienen como `detalle` un string pelado, no un objeto** (leído de las llamadas
+a `registrar()` en `src/orquestador.ts`): `detenida` el motivo, `rescate` el repo, `aparcada` el id
+de la pregunta, `solicitud_rechazada` el id de la solicitud, `completada` el resumen de cierre y
+`recordatorio_de_cierre` el id del agente. Los otros siete traen un objeto. Una vista que asuma
+objeto para los trece no tiene campos que recorrer en esos seis: el detalle se muestra como el
+texto que es. La forma exacta de cada uno la documenta el servidor en `servidor/docs/lectura/`
+(`I-07`).
+
+**El `detalle` de `verificacion_fallida` no trae la salida del comando** (encontrado al preparar
+`I-15`). `registrar()` lo escribe como `{ agente, comando, reintentable, intento }`
+(`src/orquestador.ts:327`). La salida del comando que falló existe —`verificar()` la devuelve en
+`v.salida`, `src/verificacion.ts:26`— pero el orquestador la usa para armar el mensaje con el que
+le devuelve el turno al agente (`src/orquestador.ts:357`) y **no la persiste en el estado**. La
+interfaz no puede mostrarla porque no está en el archivo que lee. El criterio de `I-11` que la
+pedía se corrigió, y el fixture de `I-15` copia la forma del código en vez de inventar el campo:
+un fixture con un `salida` que el orquestador nunca escribe haría pasar una pantalla que con datos
+reales queda vacía, que es el modo de falla que los fixtures vienen a evitar.
+
 ### D-10 · El esquema del estado se lee como parcial
 
 Los JSON en disco vienen de versiones distintas: los de septiembre no tienen

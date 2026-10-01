@@ -79,7 +79,10 @@ El contenido protagonista. Se ve, para una tarea:
 - **Historial completo en orden**, cada evento con su fecha y su detalle legible: inicio,
   solicitud, solicitud rechazada, entrega, preguntas con su respuesta, verificación fallida,
   corte de red, rescate, recordatorio de cierre, agente completo, aparcada, detenida,
-  completada.
+  completada. "Legible" es lo que el evento guardó y nada más: de una verificación fallida se ve
+  el comando, el intento y si era reintentable, **no la salida del comando**, porque el
+  orquestador no la escribe en el estado (ver D-9). De seis de los trece el detalle es un texto
+  suelto, no un objeto con campos.
 - **Pregunta pendiente**: si la tarea quedó aparcada esperando una respuesta, se ve la
   pregunta con su `porQue`, su `dondeBusque`, sus opciones y su recomendación. Se muestra;
   no se contesta desde acá (eso es fase 3). Esos campos viven anidados dentro de
@@ -163,6 +166,14 @@ mostrar: `solicitud_rechazada`, `verificacion_fallida`, `corte_de_red` y
 evento, lo aporta el fixture de la tarea aparcada. Los cuatro que faltan van por fixture
 también (`I-15`): un criterio que nombra un evento del que no hay un solo dato en disco no se
 puede verificar.
+
+Al preparar `I-15` apareció el otro lado del mismo problema: un criterio puede nombrar un **campo**
+que no existe, y entonces el fixture es lo que lo inventa. `I-11` pedía ver la salida del comando
+de una `verificacion_fallida`, y el orquestador no la guarda (D-9). Un fixture escrito desde el
+criterio en vez de desde el código la habría agregado, el criterio habría pasado, y la pantalla
+habría quedado vacía con los datos reales. De ahí la regla de `I-15`: la forma del `detalle` se
+copia del `registrar()` que la escribe, y si no coincide con lo que pide un criterio, lo que se
+corrige es el criterio.
 
 Al implementar `I-06` se sumó a esa lista un caso más, de decisiones y no de tareas: un proyecto
 con config, raíz existente y sin `decisiones.md` (ver R-05). Estaba en disco cuando se escribió

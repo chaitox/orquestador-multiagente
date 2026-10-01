@@ -217,7 +217,13 @@ Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma a
 
 - Una carpeta `.orquestador/fixture-<caso>/` más, con una tarea cuyo historial incluya los
   cuatro eventos, cada uno con el `detalle` de la forma que escribe `registrar()` en
-  `src/orquestador.ts` — no inventado: la forma se copia del código que lo escribe.
+  `src/orquestador.ts` — no inventado: la forma se copia del código que lo escribe. Son
+  `solicitud_rechazada` → el id de la solicitud, string pelado (`src/orquestador.ts:169`);
+  `recordatorio_de_cierre` → el id del agente, string pelado (línea 220);
+  `corte_de_red` → `{ agente, error, intento, esperaSeg }` (línea 309); y
+  `verificacion_fallida` → `{ agente, comando, reintentable, intento }` (línea 327),
+  **sin `salida`**: el orquestador no la persiste (D-9). Un campo de más en el fixture es peor
+  que ninguno, porque hace pasar un criterio que con datos reales falla.
 - Se monta y se borra con los mismos comandos de `I-14`, y después de borrarlos
   `GET /api/proyectos` vuelve a devolver exactamente los seis proyectos de `I-02`.
 - No modifica, renombra ni borra ningún archivo real de `.orquestador/` (D-11), ni toca los
@@ -318,9 +324,12 @@ orden.
 - Los eventos de la lista de D-9 se presentan cada uno con su detalle legible: una `solicitud`
   muestra origen, destino, problema y esperado; una `entrega`, resumen, archivos y los ids de
   tareas citados; `preguntas`, cada pregunta con su respuesta. Esos tres salen de datos reales
-  de `inmobiliaria`. Una `verificacion_fallida` muestra el comando y su salida, pero **en disco
-  no hay ninguna**: se verifica con el fixture de `I-15`, igual que `solicitud_rechazada`,
-  `corte_de_red` y `recordatorio_de_cierre`.
+  de `inmobiliaria`. Una `verificacion_fallida` muestra el comando, el número de intento y si es
+  reintentable —**no su salida: el orquestador no la guarda** en el historial (D-9), así que
+  pedirla sería pedir un campo que no existe—, y en disco no hay ninguna: se verifica con el
+  fixture de `I-15`, igual que `solicitud_rechazada`, `corte_de_red` y `recordatorio_de_cierre`.
+- Los seis eventos cuyo `detalle` es un string pelado y no un objeto (D-9) se ven como el texto
+  que son, sin una tabla de campos vacía al lado.
 - Un evento con un nombre fuera de esa lista se muestra genérico (fecha, nombre, detalle en
   crudo) y no rompe la vista (D-9), verificado con el fixture de evento desconocido de `I-14`.
 - Si la tarea está aparcada, la pregunta pendiente aparece **antes** que el resto, completa
