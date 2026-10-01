@@ -1,7 +1,53 @@
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 
 function git(repo: string, args: string[]): string {
-  return execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  return gitCrudo(repo, args).trim();
+}
+
+/** Sin trim: en `status --porcelain` el espacio inicial de la primera línea es parte del estado */
+function gitCrudo(repo: string, args: string[]): string {
+  return execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+}
+
+/**
+ * Git devuelve las rutas relativas al toplevel del repo. Esto las pasa a relativas a `carpeta`,
+ * que puede ser una subcarpeta (monorepo): "specs/lectura/x.md" desde specs/ es "lectura/x.md".
+ * Lo que queda fuera de la carpeta vuelve como "../a.txt": sigue contando como cambio.
+ * Con --show-prefix y no --show-toplevel: el toplevel viene resuelto (/private/tmp en macOS)
+ * y no se podría comparar contra la ruta que recibe la función.
+ */
+function relativasA(carpeta: string, rutas: string[]): string[] {
+  const prefijo = git(carpeta, ["rev-parse", "--show-prefix"]); // "" en el toplevel
+  if (!prefijo) return rutas;
+  const subida = prefijo.split("/").filter(Boolean).map(() => "..").join("/");
+  return rutas.map((r) => (r.startsWith(prefijo) ? r.slice(prefijo.length) : path.posix.join(subida, r)));
+}
+
+const ESCAPES_C: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, "\\": 92 };
+
+/**
+ * Git entrecomilla las rutas con caracteres especiales y escapa los bytes no ASCII en octal:
+ * "dise\303\261o.md". Esto devuelve la ruta tal como está en disco: diseño.md.
+ */
+function desescapar(ruta: string): string {
+  if (ruta.length < 2 || !ruta.startsWith('"') || !ruta.endsWith('"')) return ruta;
+  const s = ruta.slice(1, -1);
+  const bytes: number[] = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== "\\") {
+      const caracter = String.fromCodePoint(s.codePointAt(i)!);
+      bytes.push(...Buffer.from(caracter, "utf8"));
+      i += caracter.length - 1;
+    } else if (/[0-7]/.test(s[i + 1] ?? "")) {
+      bytes.push(parseInt(s.slice(i + 1, i + 4), 8));
+      i += 3;
+    } else {
+      i += 1;
+      bytes.push(ESCAPES_C[s[i]] ?? s.charCodeAt(i));
+    }
+  }
+  return Buffer.from(bytes).toString("utf8");
 }
 
 export function esRepo(repo: string): boolean {
@@ -13,15 +59,16 @@ export function esRepo(repo: string): boolean {
   }
 }
 
-/** Rutas relativas al repo con cambios sin commitear (incluye archivos nuevos) */
+/** Rutas relativas a `repo` (aunque sea una subcarpeta del repo git) con cambios sin commitear, incluye archivos nuevos */
 export function archivosModificados(repo: string): string[] {
-  const salida = git(repo, ["status", "--porcelain", "--untracked-files=all"]);
-  if (!salida) return [];
-  return salida
+  const salida = gitCrudo(repo, ["status", "--porcelain", "--untracked-files=all"]);
+  const rutas = salida
     .split("\n")
-    .map((l) => l.slice(3).trim())
+    .filter(Boolean)
+    .map((l) => l.slice(3))
     .map((l) => (l.includes(" -> ") ? l.split(" -> ")[1] : l)) // renombrados
-    .map((l) => l.replace(/^"|"$/g, ""));
+    .map(desescapar);
+  return relativasA(repo, rutas);
 }
 
 export function ramaActual(repo: string): string {
@@ -114,9 +161,9 @@ export function esHead(repo: string, commit: string): boolean {
   return git(repo, ["rev-parse", "HEAD"]) === commit;
 }
 
-/** Rutas relativas al repo que cambiaron entre `desde` y HEAD (lo ya commiteado) */
+/** Rutas relativas a `repo` que cambiaron entre `desde` y HEAD (lo ya commiteado). Con -z git no las escapa */
 export function archivosCommiteadosDesde(repo: string, desde: string): string[] {
-  return git(repo, ["diff", "--name-only", "-z", desde, "HEAD"]).split("\0").filter(Boolean);
+  return relativasA(repo, git(repo, ["diff", "--name-only", "-z", desde, "HEAD"]).split("\0").filter(Boolean));
 }
 
 export function commitTodo(repo: string, mensaje: string): boolean {
