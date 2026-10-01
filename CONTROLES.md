@@ -196,6 +196,133 @@ exista con las entradas que falten.
 
 ---
 
+## 9 · El contrato no veía el trabajo rescatado — medido (2026-09-29), arreglo parcial
+
+**El bug:** `validarContrato` (`src/herramientas.ts`) miraba solo `git status`, es decir, lo que
+estaba sin commitear. No había ningún "commit base" registrado al arrancar la tarea. Cuando una
+corrida se detiene, `detener()` commitea lo hecho con `SIN-VERIFICAR`, y la corrida siguiente, al
+cerrar, veía cero cambios y rechazaba.
+
+**Arreglo:** `baseVerificada(repo)` en `src/git.ts` recorre el log desde HEAD y devuelve el primer
+commit cuyo asunto no lleva la marca. El contrato cuenta ahora lo sin commitear **más** lo que
+cambió entre esa base y HEAD. Si la base es HEAD, que es el caso sin rescates, el comportamiento es
+el de antes. La base se calcula al cerrar, dentro de `validarContrato`, y no al arrancar la tarea.
+Así una entrega commiteada durante la misma corrida no le cuenta al cierre siguiente, igual que
+antes.
+
+Repo temporal: `normal: base` y dos commits `SIN-VERIFICAR` encima (`docs/contrato.md`, `b.txt`).
+Agente con contrato `requiereCambiosEn: ["docs/**"]`:
+
+```
+baseVerificada          = 9aed94b… OK (es el commit normal)
+antes: git status ve    = []
+ahora: rescatados       = ["b.txt","docs/contrato.md"]
+sin marcas: base es HEAD = true
+repo vacío: null
+
+tarea_completa, código anterior, HEAD en el 2º SIN-VERIFICAR → Rechazado: no hay cambios en docs/**
+tarea_completa, código nuevo,    HEAD en el 2º SIN-VERIFICAR → Tarea marcada como completa
+tarea_completa, código nuevo,    HEAD en el commit normal    → Rechazado: no hay cambios en docs/**
+```
+
+**Sin medir / abierto:**
+- **Rama atrasada respecto de main: el bug sigue.** Si la rama del agente quedó atrás, `asegurarRama`
+  mergea main encima de los commits `SIN-VERIFICAR`. El merge (`actualiza feat/x con main`) no lleva
+  la marca, así que `baseVerificada` devuelve el merge = HEAD y los rescatados vuelven a ser
+  invisibles. Medido en el mismo repo temporal: `base es HEAD (el merge): true → rescatados: []`.
+  Saltear el merge y comparar contra el commit normal tampoco sirve, porque metería los cambios de
+  main en la cuenta y el contrato podría pasar con trabajo ajeno.
+- No se probó en una corrida real con el SDK: la prueba es de las funciones y del handler.
+
+---
+
+## 10 · Instrumentación de las herramientas de coordinación — medido el log, no la causa
+
+**El síntoma:** en tres corridas, llamadas a `mcp__coordinacion__*` (`tarea_completa`,
+`entrega_lista`) se cortaron sin devolver resultado, mientras Bash y ToolSearch seguían andando.
+
+**Lo que se agregó (solo instrumentación, no arreglo):** en `src/motores/claude.ts` cada handler
+pasado a `tool()` queda envuelto y escribe en `.orquestador/herramientas.log`, con
+`appendFileSync` para que la línea quede escrita aunque el proceso muera:
+
+```
+… ctrl tarea_completa ENTRADA {"resumen":"…"}
+… ctrl tarea_completa SALIDA {"ms":32,"salida":{"content":[…],"isError":false}}
+… ctrl entrega_lista ENTRADA {"resumen":"…"}
+… ctrl entrega_lista EXCEPCION {"ms":20,"mensaje":"falla provocada","stack":"Error: falla provocada\n    at …"}
+```
+
+Medido invocando los handlers registrados en el servidor MCP que arma `opcionesDe`. La excepción se
+provocó rompiendo el buzón a propósito, y se confirmó que se sigue propagando igual que antes.
+
+**Cómo leerlo:** una `ENTRADA` sin `SALIDA` ni `EXCEPCION` es una llamada que nunca terminó. Si
+tampoco hay `ENTRADA`, la llamada nunca llegó al handler: el corte está en el SDK o en el transporte
+MCP, antes de este código.
+
+**Sin medir:** que el log capture el síntoma real. Eso recién se ve en la próxima corrida que se
+corte. Tampoco se registra si el SDK aborta la llamada (el `extra` del handler, con su `signal`, no
+se inspecciona).
+
+---
+
+## 11 · Cortes de red: reintentar en vez de detener — medido el clasificador, no el reintento
+
+**Antes:** un error de red detenía la tarea igual que un error del agente.
+
+**Ahora:** en `correrConVerificacion` (`src/orquestador.ts`), si `ejecutarAgente` vuelve con un
+error de red y el agente todavía no cerró nada (sin entrega, completa, bloqueo, solicitudes ni
+pregunta sin responder), se
+espera 10, 30 y 60 s y se retoma la misma sesión. El mensaje se reenvía con un aviso de corte al
+frente, porque no se sabe si llegó a la sesión antes del corte. Tras el tercer fallo sigue el camino
+de siempre y la tarea se detiene. Cada reintento queda en el historial como `corte_de_red`.
+
+**Qué se considera de red** (`esErrorDeRed` en `src/motores/claude.ts`), buscado en el texto del
+error:
+
+```
+/\bENOTFOUND\b/            /\bECONNRESET\b/          /\bECONNREFUSED\b/
+/\bETIMEDOUT\b/            /\bEAI_AGAIN\b/           /\bENETUNREACH\b/
+/can.t reach the api server/i
+/\bConnection error\./     ← texto por defecto de APIConnectionError en el SDK
+/\bRequest timed out\./    ← texto por defecto de APIConnectionTimeoutError en el SDK
+```
+
+**Cambio necesario fuera del reintento:** antes, un `result` con error guardaba solo el subtipo
+(`error_during_execution`), y con eso no se puede distinguir un corte de red de otra falla. Ahora el
+error lleva además `errors[]` del result y el texto de los mensajes de API con `error`:
+`error_during_execution — <detalle>`. El motivo de `detener` muestra ese detalle.
+
+Clasificador, medido:
+
+```
+RED     "getaddrinfo ENOTFOUND api.anthropic.com"
+RED     "read ECONNRESET"
+RED     "error_during_execution — API Error: Can't reach the API server"
+RED     "error_during_execution — Can’t reach the API server"
+RED     "connect ECONNREFUSED 127.0.0.1:443"
+RED     "error_during_execution — Connection error."
+RED     "Request timed out."
+NO RED  "error_during_execution"
+NO RED  "error_max_turns"
+NO RED  "falló la verificación \"npm test\" tras 3 intentos"
+NO RED  "Claude Code process exited with code 1"
+NO RED  "API Error: 529 overloaded"
+NO RED  "enotfound en minúscula dentro de un texto"
+```
+
+**Sin medir:**
+- El bucle de reintento en sí (esperas, retomar la sesión, detener al cuarto fallo). No se simuló un
+  corte contra el SDK.
+- Dónde aparece exactamente "Can't reach the API server" en una corrida real: en `errors[]` del
+  result, en un assistant con `error` o en una excepción. Los tres caminos quedan cubiertos, pero no
+  se vio cuál es.
+- Si el CLI informara el corte como `result` `success` con `is_error: true`, no se detecta. Ese caso
+  sigue como antes: recordatorio de cierre.
+- Que retomar la sesión tras un corte no duplique trabajo. El aviso le pide al agente que no rehaga
+  lo hecho, pero no hay control de eso.
+
+---
+
 ## Pendientes conocidos
 
 - **`dondeBusque` no prueba lectura, solo existencia.** Si el SDK expone el historial de la sesión,

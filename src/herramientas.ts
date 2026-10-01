@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Buzon } from "./buzon.js";
 import type { Canal, Pregunta } from "./canal.js";
 import { registrarDecision, siguienteIdDecision } from "./decisiones.js";
-import { archivosModificados } from "./git.js";
+import { archivosCommiteadosDesde, archivosModificados, baseVerificada, esHead } from "./git.js";
 import { algunaCoincide } from "./glob.js";
 import type { AgenteResuelto, ProyectoResuelto } from "./tipos.js";
 import { buscarDecisionParecida, validarDondeBusque, validarIdsTarea } from "./validacion-preguntas.js";
@@ -85,7 +85,11 @@ export function herramientasDe(
     const patrones = agente.contrato?.requiereCambiosEn ?? [];
     if (patrones.length === 0) return null;
 
-    const relativos = archivosModificados(agente.repo).map((f) =>
+    // Lo sin commitear, más lo que quedó en commits SIN-VERIFICAR de una corrida que se detuvo:
+    // ese trabajo nunca pasó el contrato, así que cuenta como parte de este cierre.
+    const base = baseVerificada(agente.repo);
+    const rescatados = base && !esHead(agente.repo, base) ? archivosCommiteadosDesde(agente.repo, base) : [];
+    const relativos = [...new Set([...archivosModificados(agente.repo), ...rescatados])].map((f) =>
       path.relative(agente.raiz, path.join(agente.repo, f)),
     );
 

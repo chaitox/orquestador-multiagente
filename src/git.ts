@@ -90,6 +90,35 @@ export function ultimoCommitSinVerificar(repo: string): boolean {
   }
 }
 
+/**
+ * Primer commit, recorriendo el log hacia atrás desde HEAD, cuyo asunto NO lleva la marca
+ * SIN-VERIFICAR: el último punto que pasó el contrato. null si no hay commits o todos la llevan.
+ */
+export function baseVerificada(repo: string): string | null {
+  let log: string;
+  try {
+    log = git(repo, ["log", "--format=%H%x09%s"]);
+  } catch {
+    return null; // repo sin commits
+  }
+  for (const linea of log.split("\n")) {
+    const tab = linea.indexOf("\t");
+    if (tab === -1) continue;
+    if (!linea.slice(tab + 1).includes(MARCA_SIN_VERIFICAR)) return linea.slice(0, tab);
+  }
+  return null;
+}
+
+/** true si `commit` es el HEAD actual del repo */
+export function esHead(repo: string, commit: string): boolean {
+  return git(repo, ["rev-parse", "HEAD"]) === commit;
+}
+
+/** Rutas relativas al repo que cambiaron entre `desde` y HEAD (lo ya commiteado) */
+export function archivosCommiteadosDesde(repo: string, desde: string): string[] {
+  return git(repo, ["diff", "--name-only", "-z", desde, "HEAD"]).split("\0").filter(Boolean);
+}
+
 export function commitTodo(repo: string, mensaje: string): boolean {
   if (estaLimpio(repo)) return false;
   git(repo, ["add", "-A"]);

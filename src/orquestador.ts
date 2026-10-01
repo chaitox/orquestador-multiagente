@@ -23,7 +23,7 @@ import {
   ultimoCommitSinVerificar,
 } from "./git.js";
 import { ContadorPreguntas } from "./herramientas.js";
-import { ejecutarAgente, opcionesDe, type ResultadoEjecucion } from "./motores/claude.js";
+import { ejecutarAgente, esErrorDeRed, opcionesDe, type ResultadoEjecucion } from "./motores/claude.js";
 import { adquirir, liberar } from "./recursos.js";
 import type { AgenteResuelto, ProyectoResuelto } from "./tipos.js";
 import { verificar } from "./verificacion.js";
@@ -246,6 +246,9 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
 
 /* --------------------------- verificación --------------------------- */
 
+/** Esperas antes de cada reintento por un corte de red; agotadas, se detiene como cualquier error */
+const ESPERAS_RED_SEG = [10, 30, 60];
+
 async function correrConVerificacion(
   p: ProyectoResuelto,
   agente: AgenteResuelto,
@@ -258,6 +261,7 @@ async function correrConVerificacion(
   contador: ContadorPreguntas,
 ) {
   let intento = 0;
+  let cortesDeRed = 0;
   let mensaje = prompt;
 
   while (true) {
@@ -280,6 +284,26 @@ async function correrConVerificacion(
       estado.sesiones[agente.id] = r.sessionId;
     }
     estado.costoEstimadoUsd += r.costoUsd;
+
+    // Corte de red: se retoma la misma sesión en vez de detener. Solo si el agente no llegó a
+    // cerrar nada ni dejó una pregunta sin responder: en esos casos el error de después no
+    // cambia lo que el orquestador hace (sigue, o aparca).
+    const cerroAlgo =
+      Boolean(buzon.entrega || buzon.completa || buzon.bloqueo || buzon.solicitudes.length) ||
+      buzon.preguntas.some((x) => x.respuesta === null);
+    if (r.error && esErrorDeRed(r.error) && !cerroAlgo && cortesDeRed < ESPERAS_RED_SEG.length) {
+      const espera = ESPERAS_RED_SEG[cortesDeRed];
+      cortesDeRed += 1;
+      registrar(estado, "corte_de_red", { agente: agente.id, error: r.error, intento: cortesDeRed, esperaSeg: espera });
+      console.warn(
+        `\x1b[33m   ⚡ ${agente.id}: corte de red (${r.error.slice(0, 120)}). ` +
+        `Reintento ${cortesDeRed}/${ESPERAS_RED_SEG.length} en ${espera}s\x1b[0m`,
+      );
+      await new Promise((ok) => setTimeout(ok, espera * 1000));
+      // No se sabe si el pedido llegó a la sesión antes del corte: se reenvía entero.
+      if (!mensaje.startsWith(AVISO_CORTE)) mensaje = `${AVISO_CORTE}\n\n${mensaje}`;
+      continue;
+    }
 
     const cierra = Boolean(buzon.entrega || buzon.completa);
     if (!cierra || agente.verificacion.length === 0) return r;
@@ -326,6 +350,10 @@ async function correrConVerificacion(
 }
 
 /* ------------------------------ prompts ------------------------------ */
+
+const AVISO_CORTE =
+  "Se cortó la conexión con la API a mitad de tu turno. Si ya habías empezado con lo de abajo, " +
+  "continuá desde donde estabas sin rehacer lo hecho; si no, empezalo.";
 
 const promptInicial = (o: Opciones, avisoSinVerificar: string) =>
   `Tarea (feature "${o.feature}"):\n${o.descripcion}\n\n` +
