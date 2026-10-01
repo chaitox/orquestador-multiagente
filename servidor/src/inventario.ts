@@ -1,46 +1,73 @@
 import fs from "node:fs";
-import { DIR_ESTADO, DIR_PROYECTOS } from "./raices.js";
+import path from "node:path";
+import { DIR_ESTADO } from "./raices.js";
+import { nombresConConfig, nombresConEstado } from "./nombres.js";
+import { cargarProyectoResuelto } from "./proyectoConfig.js";
+import { agregarTareas } from "./tareas.js";
 
 export interface ProyectoInventario {
   nombre: string;
   tieneConfig: boolean;
   tieneEstado: boolean;
-}
-
-/**
- * Misma regla que listarProyectos() en src/config.ts (basename de proyectos/*.ts|js, sin
- * extensión), reimplementada en vez de importada: esa función no toma el directorio como
- * parámetro, sino que lee DIR_PROYECTOS calculado con process.cwd() (ver raices.ts).
- */
-function nombresConConfig(): string[] {
-  if (!fs.existsSync(DIR_PROYECTOS)) return [];
-  return fs
-    .readdirSync(DIR_PROYECTOS)
-    .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
-    .map((f) => f.replace(/\.(ts|js)$/, ""));
-}
-
-function nombresConEstado(): string[] {
-  if (!fs.existsSync(DIR_ESTADO)) return [];
-  return fs
-    .readdirSync(DIR_ESTADO, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name);
+  /** null si no hay config que resolver (sin config no hay raíz declarada) */
+  raizExiste: boolean | null;
+  /** Mensaje si cargar el config tiró (D-3): el proyecto igual queda en la lista. */
+  errorConfig: string | null;
+  /** Ids de agentes, solo si hay config resuelta (R-01: "cuando hay config"). */
+  agentes: string[] | null;
+  cantidadTareas: number;
+  costoAcumuladoUsd: number;
+  ultimaTareaFecha: string | null;
 }
 
 /**
  * D-1: un proyecto existe para la interfaz si tiene proyectos/<nombre>.ts o
- * .orquestador/<nombre>/, o ambos. Esto es solo el inventario de nombres — I-02 agrega
- * encima el agregado por proyecto (cantidad de tareas, costo, agentes, última fecha).
+ * .orquestador/<nombre>/, o ambos. I-02: además del inventario de nombres (I-01), el
+ * agregado por proyecto (cantidad de tareas, costo, fecha de la última, ids de agentes) y las
+ * marcas de D-3 (raizExiste, errorConfig).
+ *
+ * D-3: cada proyecto se carga en su propio try — uno que explota al cargar su config no tumba
+ * el resto de la lista.
  */
-export function calcularInventario(): ProyectoInventario[] {
+export async function calcularInventario(): Promise<ProyectoInventario[]> {
   const conConfig = new Set(nombresConConfig());
   const conEstado = new Set(nombresConEstado());
-  const nombres = new Set<string>([...conConfig, ...conEstado]);
+  const nombres = [...new Set([...conConfig, ...conEstado])].sort();
 
-  return [...nombres].sort().map((nombre) => ({
-    nombre,
-    tieneConfig: conConfig.has(nombre),
-    tieneEstado: conEstado.has(nombre),
-  }));
+  return Promise.all(
+    nombres.map(async (nombre): Promise<ProyectoInventario> => {
+      const tieneConfig = conConfig.has(nombre);
+      const tieneEstado = conEstado.has(nombre);
+
+      const agregado = tieneEstado
+        ? agregarTareas(path.join(DIR_ESTADO, nombre))
+        : { cantidad: 0, costoAcumuladoUsd: 0, ultimaFecha: null };
+
+      let raizExiste: boolean | null = null;
+      let errorConfig: string | null = null;
+      let agentes: string[] | null = null;
+
+      if (tieneConfig) {
+        try {
+          const resuelto = await cargarProyectoResuelto(nombre);
+          raizExiste = fs.existsSync(resuelto.raiz);
+          agentes = resuelto.agentes.map((a) => a.id);
+        } catch (e) {
+          errorConfig = e instanceof Error ? e.message : String(e);
+        }
+      }
+
+      return {
+        nombre,
+        tieneConfig,
+        tieneEstado,
+        raizExiste,
+        errorConfig,
+        agentes,
+        cantidadTareas: agregado.cantidad,
+        costoAcumuladoUsd: agregado.costoAcumuladoUsd,
+        ultimaTareaFecha: agregado.ultimaFecha,
+      };
+    }),
+  );
 }

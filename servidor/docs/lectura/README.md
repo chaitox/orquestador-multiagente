@@ -1,8 +1,9 @@
-# Servidor de lectura — I-01 e I-14
+# Servidor de lectura — I-01, I-02, I-03 e I-14
 
-Cubre `I-01` (servidor HTTP + resolución de rutas por lista blanca) e `I-14` (fixtures de
-los casos que no están en disco). El resto del contrato (`I-02` a `I-07`) todavía no está
-implementado — llega en entregas siguientes del mismo agente.
+Cubre `I-01` (servidor HTTP + resolución de rutas por lista blanca), `I-02` (inventario de
+proyectos), `I-03` (detalle de un proyecto) e `I-14` (fixtures de los casos que no están en
+disco). El resto del contrato (`I-04` a `I-07`) todavía no está implementado — llega en
+entregas siguientes del mismo agente.
 
 ## Cómo arrancar (D-7)
 
@@ -20,42 +21,250 @@ La web (`I-08`, D-7) lee el puerto de acá para configurar su proxy de Vite: **4
 
 ## Rutas que existen hoy
 
-Son un adelanto mínimo para poder probar el servidor y el helper de lista blanca de I-01,
-**no** el contrato final de `I-02`/`I-03` (que todavía no agregan cantidad de tareas, costo
-acumulado, fecha de última tarea ni agentes — eso es la próxima entrega). El formato de
-estas dos respuestas puede cambiar cuando se implementen esas tareas.
+### `GET /api/proyectos` (I-02)
 
-### `GET /api/proyectos`
+Unión de `proyectos/*.ts` y `.orquestador/<nombre>/` (D-1), con el agregado por proyecto que
+pide `I-02`: cantidad de tareas, costo acumulado (redondeado a 4 decimales), fecha de la
+tarea más reciente e ids de agentes (solo si hay config). Además las marcas de D-3:
+`raizExiste` (si la raíz del config resuelve a una carpeta que existe; `null` si no hay
+config que resolver) y `errorConfig` (el mensaje si cargar el config tiró; el proyecto
+sigue en la lista igual — un proyecto no puede tumbar a los demás).
 
-Unión de `proyectos/*.ts` y `.orquestador/<nombre>/` (D-1), sin fixtures montados:
+Ejecutado contra el disco real de este repo, sin fixtures montados:
 
 ```json
 [
-  { "nombre": "ejemplo-pedidos", "tieneConfig": true, "tieneEstado": false },
-  { "nombre": "ejemplo-python-react", "tieneConfig": true, "tieneEstado": false },
-  { "nombre": "ejemplo-spec", "tieneConfig": true, "tieneEstado": false },
-  { "nombre": "inmobiliaria", "tieneConfig": false, "tieneEstado": true },
-  { "nombre": "interfaz", "tieneConfig": true, "tieneEstado": true },
-  { "nombre": "prueba", "tieneConfig": true, "tieneEstado": true }
+  {
+    "nombre": "ejemplo-pedidos",
+    "tieneConfig": true,
+    "tieneEstado": false,
+    "raizExiste": false,
+    "errorConfig": null,
+    "agentes": ["app", "api", "portal"],
+    "cantidadTareas": 0,
+    "costoAcumuladoUsd": 0,
+    "ultimaTareaFecha": null
+  },
+  {
+    "nombre": "ejemplo-python-react",
+    "tieneConfig": true,
+    "tieneEstado": false,
+    "raizExiste": false,
+    "errorConfig": null,
+    "agentes": ["web", "api"],
+    "cantidadTareas": 0,
+    "costoAcumuladoUsd": 0,
+    "ultimaTareaFecha": null
+  },
+  {
+    "nombre": "ejemplo-spec",
+    "tieneConfig": true,
+    "tieneEstado": false,
+    "raizExiste": false,
+    "errorConfig": null,
+    "agentes": ["spec", "api", "web"],
+    "cantidadTareas": 0,
+    "costoAcumuladoUsd": 0,
+    "ultimaTareaFecha": null
+  },
+  {
+    "nombre": "inmobiliaria",
+    "tieneConfig": false,
+    "tieneEstado": true,
+    "raizExiste": null,
+    "errorConfig": null,
+    "agentes": null,
+    "cantidadTareas": 41,
+    "costoAcumuladoUsd": 100.7706,
+    "ultimaTareaFecha": "2026-09-23T16:34:01.847Z"
+  },
+  {
+    "nombre": "interfaz",
+    "tieneConfig": true,
+    "tieneEstado": true,
+    "raizExiste": true,
+    "errorConfig": null,
+    "agentes": ["spec", "servidor", "web"],
+    "cantidadTareas": 5,
+    "costoAcumuladoUsd": 11.8448,
+    "ultimaTareaFecha": "2026-10-01T14:19:48.713Z"
+  },
+  {
+    "nombre": "prueba",
+    "tieneConfig": true,
+    "tieneEstado": true,
+    "raizExiste": true,
+    "errorConfig": null,
+    "agentes": ["a", "b"],
+    "cantidadTareas": 5,
+    "costoAcumuladoUsd": 0.4935,
+    "ultimaTareaFecha": "2026-10-01T11:26:52.331Z"
+  }
 ]
 ```
 
-Ejecutado contra el disco real de este repo (sin fixtures): da exactamente estos seis
-proyectos, igual que pide el criterio de `I-02`.
+Da exactamente estos seis proyectos, igual que pide el criterio de `I-02`. `inmobiliaria`
+(sin `proyectos/inmobiliaria.ts`) suma `100.7706` de sus 41 archivos — verificado igual al
+número del criterio. `cantidadTareas` de `interfaz` y `prueba` sube con cada corrida
+(incluida la que generó este ejemplo): no es un número fijo, a diferencia del de
+`inmobiliaria` (ver `I-02` en `specs/lectura/tareas.md`).
 
-### `GET /api/proyectos/:nombre`
+Con un fixture de JSON inválido montado (`npm run fixtures:montar`, ver más abajo), ese
+proyecto sigue en la lista (`cantidadTareas` lo cuenta, `costoAcumuladoUsd` no suma su costo
+porque no se pudo leer) y el endpoint sigue respondiendo `200`.
 
-Mismo objeto que la fila de arriba, buscado por `:nombre` a través del helper de lista
-blanca de D-5 (abajo). Ejemplo, `GET /api/proyectos/interfaz`:
+### `GET /api/proyectos/:nombre` (I-03)
+
+Config resuelta del proyecto (misma resolución que usa el orquestador real,
+`cargarProyecto()` de `src/config.ts`, con `exigirRaices: false` — D-3) más las marcas de
+config/raíz faltante. `:nombre` se busca con el mismo helper de lista blanca de D-5 que usa
+`GET /api/proyectos`.
+
+**`GET /api/proyectos/interfaz`** — sus tres agentes con carpeta, modelo resuelto, lecturas
+extra, verificaciones, recursos y contrato, y los topes del proyecto (`maxTurnos: 150`,
+`specDriven: true` en `specs/{feature}`):
 
 ```json
-{ "nombre": "interfaz", "tieneConfig": true, "tieneEstado": true }
+{
+  "nombre": "interfaz",
+  "tieneConfig": true,
+  "errorConfig": null,
+  "config": {
+    "raiz": "/ruta/al/repo",
+    "raizExiste": true,
+    "modeloPorDefecto": "claude-sonnet-5",
+    "maxSolicitudes": 6,
+    "maxTurnos": 150,
+    "maxIntentosVerificacion": 2,
+    "git": {
+      "estrategia": "rama-por-tarea",
+      "prefijoRama": "agente/",
+      "commitAlCerrar": true,
+      "exigirLimpio": true
+    },
+    "preguntas": {
+      "canal": "consola",
+      "timeoutMin": 45,
+      "maxPorTarea": 10,
+      "avisarFin": true,
+      "fase0": true
+    },
+    "specDriven": true,
+    "spec": { "dir": "specs/{feature}", "archivoTareas": "tareas.md", "agente": "spec" },
+    "agentes": [
+      {
+        "id": "spec",
+        "descripcion": "Escribe la especificación de la interfaz. No toca código.",
+        "carpeta": "/ruta/al/repo/specs",
+        "repo": "/ruta/al/repo/specs",
+        "modelo": "claude-opus-5",
+        "lecturaExtra": ["/ruta/al/repo/src", "/ruta/al/repo/servidor", "/ruta/al/repo/web", "/ruta/al/repo/MANUAL-WEB.md"],
+        "verificacion": [],
+        "recursos": [],
+        "contrato": { "requiereCambiosEn": ["{feature}/requisitos.md", "{feature}/tareas.md"] }
+      },
+      {
+        "id": "servidor",
+        "descripcion": "API local de solo lectura sobre .orquestador/, proyectos/ y decisiones.md. Dueño del contrato.",
+        "carpeta": "/ruta/al/repo/servidor",
+        "repo": "/ruta/al/repo/servidor",
+        "modelo": "claude-sonnet-5",
+        "lecturaExtra": ["/ruta/al/repo/specs", "/ruta/al/repo/src"],
+        "verificacion": [{ "comando": "npx tsc --noEmit", "reintentar": true }],
+        "recursos": ["estado-orquestador"],
+        "contrato": { "requiereCambiosEn": ["docs/{feature}/**"] }
+      },
+      {
+        "id": "web",
+        "descripcion": "Interfaz en React + Vite. Consume la API del servidor.",
+        "carpeta": "/ruta/al/repo/web",
+        "repo": "/ruta/al/repo/web",
+        "modelo": "claude-sonnet-5",
+        "lecturaExtra": ["/ruta/al/repo/specs", "/ruta/al/repo/servidor/docs"],
+        "verificacion": [{ "comando": "npm run build", "reintentar": true }],
+        "recursos": [],
+        "contrato": null
+      }
+    ]
+  }
+}
 ```
+
+(Acá `/ruta/al/repo` reemplaza la ruta absoluta real de la máquina donde se corrió el
+ejemplo, por legibilidad — la respuesta real trae la ruta absoluta tal cual, no hay nada
+oculto.)
+
+**`GET /api/proyectos/inmobiliaria`** — sin config: `200`, no `404` (R-05, D-1):
+
+```json
+{ "nombre": "inmobiliaria", "tieneConfig": false, "errorConfig": null, "config": null }
+```
+
+**`GET /api/proyectos/ejemplo-pedidos`** — con config y raíz inexistente (`~/dev/pedidos`,
+expandida por `expandir()` de `src/config.ts`, no `~/dev/pedidos` literal): `200` con la
+marca `raizExiste: false`, y es JSON válido aunque el config tenga `sensibles` con `RegExp`
+(`[/precio/i, /pago/i, /factura/i]`, línea 17 del archivo) — ese campo no se expone en la
+respuesta (ver "RegExp" más abajo):
+
+```json
+{
+  "nombre": "ejemplo-pedidos",
+  "tieneConfig": true,
+  "errorConfig": null,
+  "config": {
+    "raiz": "/Users/<usuario>/dev/pedidos",
+    "raizExiste": false,
+    "modeloPorDefecto": "claude-sonnet-5",
+    "maxSolicitudes": 6,
+    "maxTurnos": 200,
+    "maxIntentosVerificacion": 2,
+    "git": { "estrategia": "rama-por-tarea", "prefijoRama": "agente/", "commitAlCerrar": true, "exigirLimpio": true },
+    "preguntas": { "canal": "consola", "timeoutMin": 30, "maxPorTarea": 10, "avisarFin": true, "fase0": true },
+    "specDriven": false,
+    "spec": null,
+    "agentes": [
+      { "id": "app", "descripcion": "App interna en Flutter Web (carga de pedidos, preparación, caja)", "carpeta": "/Users/<usuario>/dev/pedidos/pedidos-app", "repo": "/Users/<usuario>/dev/pedidos/pedidos-app", "modelo": "claude-sonnet-5", "lecturaExtra": ["/Users/<usuario>/dev/pedidos/pedidos-api/docs"], "verificacion": [{ "comando": "flutter analyze", "reintentar": true }, { "comando": "flutter test", "reintentar": true }], "recursos": [], "contrato": null },
+      { "id": "api", "descripcion": "Backend NestJS + Prisma + PostgreSQL", "carpeta": "/Users/<usuario>/dev/pedidos/pedidos-api", "repo": "/Users/<usuario>/dev/pedidos/pedidos-api", "modelo": "claude-opus-5", "lecturaExtra": [], "verificacion": [{ "comando": "npm run build", "reintentar": true }, { "comando": "npm test -- --passWithNoTests", "reintentar": true }], "recursos": [], "contrato": { "requiereCambiosEn": ["docs/{feature}/**"], "mensajeRechazo": "Rechazado: no actualizaste docs/{feature}/. Esos docs son el contrato que consume el front; la tarea no está terminada sin ellos." } },
+      { "id": "portal", "descripcion": "Portal web del cliente en Next.js (pedidos online)", "carpeta": "/Users/<usuario>/dev/pedidos/pedidos-portal", "repo": "/Users/<usuario>/dev/pedidos/pedidos-portal", "modelo": "claude-haiku-4-5-20251001", "lecturaExtra": ["/Users/<usuario>/dev/pedidos/pedidos-api/docs"], "verificacion": [{ "comando": "npm run lint", "reintentar": true }, { "comando": "npm run build", "reintentar": true }], "recursos": [], "contrato": null }
+    ]
+  }
+}
+```
+
+`GET /api/proyectos/ejemplo-python-react` es el mismo caso para `bashProhibido`
+(`[/alembic\s+downgrade/]`, línea 49): también `200`, también sin exponer ese campo.
 
 - `:nombre` fuera del inventario (`GET /api/proyectos/noexiste`) → `404`
   `{"error":"No se encontró el proyecto \"noexiste\""}`.
 - `:nombre` con un intento de recorrido (`GET /api/proyectos/..%2F..%2Fetc`) → `404`, sin
   tocar el filesystem fuera de `proyectos/` y `.orquestador/`.
+
+#### Campos que no están
+
+- **`sensibles` (proyecto) y `bashProhibido` (agente)**: son los dos únicos campos del config
+  tipados como `RegExp[]`. La regla transversal del diseño (`diseño.md` §"Contrato HTTP") da
+  dos opciones para que no rompan el `JSON.stringify`: serializarlos como string, o no
+  exponerlos. Acá se eligió no exponerlos — no los pide la lista de R-02 y evitar el campo es
+  más simple que mantener una serialización de `RegExp` sincronizada. `ejemplo-pedidos` (con
+  `sensibles`) y `ejemplo-python-react` (con `bashProhibido`) son los dos únicos proyectos del
+  repo con alguno de los dos campos, y sus respuestas de arriba muestran que el resto de la
+  config se sirve igual, sin que el `RegExp` tumbe la respuesta.
+- **Variables de entorno**: el servidor nunca lee `process.env` para construir una respuesta
+  (D-6). El único lugar donde una variable podría colarse es una `raiz` con `${VAR}` en el
+  config — `expandir()` de `src/config.ts` la sustituye al resolver, antes de que el servidor
+  la vea; lo que llega es la ruta ya expandida (un dato útil, una ruta de carpeta), nunca el
+  valor crudo de la variable ni el contenido de `.env`.
+
+#### Por qué `cwd` importa para I-03
+
+`resolver()` (`src/config.ts:78`) resuelve una `raiz` relativa (ej. `raiz: "."` en
+`proyectos/interfaz.ts`) con `path.resolve()` contra `process.cwd()` **en el momento en que
+corre**, no contra la constante `RAIZ_APP` que ese módulo calculó al importarse. Este
+servidor arranca con `npm start` dentro de `servidor/`, así que `src/index.ts` hace
+`process.chdir()` a la raíz del repo **una sola vez, al arrancar, antes de levantar el
+servidor** — ver el comentario ahí. Sin eso, `raiz: "."` se resolvía a `servidor/` en vez de
+a la raíz del repo (bug encontrado y corregido durante esta entrega, verificado con el
+`curl` de `interfaz` de arriba).
 
 ### Cualquier otra ruta
 
@@ -123,7 +332,7 @@ reales + `fixture-aparcada`, `fixture-evento-desconocido`, `fixture-historial-va
 | --- | --- | --- | --- |
 | Tarea aparcada con pendiente completo | `.orquestador/fixture-aparcada/aparcada-2026-01-05T00-00-00-000Z.json` | `estado: "aparcada"`, `pendiente.pregunta` con `porQue`, `dondeBusque`, `opciones` y `recomendacion` anidados bajo `pregunta` (no al tope de `pendiente`, D-10), más `pendiente.trabajo` con la forma de `src/buzon.ts:77` (`Trabajo`, `tipo: "solicitud"` con su `Solicitud` según `src/buzon.ts:6`) | `I-05` (criterio del `pendiente`), `I-10`/`I-11` del lado de la web |
 | Historial vacío | `.orquestador/fixture-historial-vacio/historial-vacio-2026-01-05T00-00-00-000Z.json` | `historial: []`; la tarea tiene que fecharse por el `mtime` del archivo, no por `historial[0].fecha` (D-4) | `I-04` |
-| JSON inválido | `.orquestador/fixture-json-invalido/json-invalido-2026-01-05T00-00-00-000Z.json` | Archivo cortado a la mitad (no parsea como JSON); la lista de tareas tiene que mostrarlo como entrada en error sin tumbar las demás (D-10) | `I-04` |
+| JSON inválido | `.orquestador/fixture-json-invalido/json-invalido-2026-01-05T00-00-00-000Z.json` | Archivo cortado a la mitad (no parsea como JSON); la lista de tareas tiene que mostrarlo como entrada en error sin tumbar las demás (D-10) | `I-02` (el proyecto sigue listado, `GET /api/proyectos` sigue en `200`), `I-04` |
 | Evento de nombre inventado | `.orquestador/fixture-evento-desconocido/evento-desconocido-2026-01-05T00-00-00-000Z.json` | Historial con `inicio`, `migracion_de_esquema` (no está en la lista cerrada de D-9) y `completada`; el evento desconocido tiene que mostrarse genérico (fecha, nombre, detalle en crudo) sin romper la vista | `I-05` (lee el historial completo), `I-11` del lado de la web |
 
 Cada fixture de tarea está escrito y tipado contra `EstadoTarea` (`src/buzon.ts`) —

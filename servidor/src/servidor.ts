@@ -1,8 +1,14 @@
 import http from "node:http";
 import { calcularInventario } from "./inventario.js";
+import { obtenerDetalleProyecto } from "./detalle.js";
+import { listarNombresProyectos } from "./nombres.js";
 import { resolverNombreProyecto } from "./rutas.js";
 
 const RUTA_PROYECTO = /^\/api\/proyectos\/([^/]+)$/;
+
+function mensajeError(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 function responderJSON(
   res: http.ServerResponse,
@@ -34,23 +40,22 @@ export function crearServidor(): http.Server {
     const ruta = url.pathname;
 
     if (ruta === "/api/proyectos") {
-      responderJSON(res, 200, calcularInventario());
+      calcularInventario()
+        .then((inventario) => responderJSON(res, 200, inventario))
+        .catch((e) => responderJSON(res, 500, { error: mensajeError(e) }));
       return;
     }
 
     const coincide = ruta.match(RUTA_PROYECTO);
     if (coincide) {
-      const inventario = calcularInventario();
-      const nombre = resolverNombreProyecto(
-        inventario.map((p) => p.nombre),
-        coincide[1]!,
-      );
+      const nombre = resolverNombreProyecto(listarNombresProyectos(), coincide[1]!);
       if (nombre === null) {
         responderJSON(res, 404, { error: `No se encontró el proyecto "${coincide[1]}"` });
         return;
       }
-      const proyecto = inventario.find((p) => p.nombre === nombre);
-      responderJSON(res, 200, proyecto);
+      obtenerDetalleProyecto(nombre)
+        .then((detalle) => responderJSON(res, 200, detalle))
+        .catch((e) => responderJSON(res, 500, { error: mensajeError(e) }));
       return;
     }
 
