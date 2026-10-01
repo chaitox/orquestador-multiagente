@@ -89,9 +89,11 @@ export function herramientasDe(
     // ese trabajo nunca pasó el contrato, así que cuenta como parte de este cierre.
     const base = baseVerificada(agente.repo);
     const rescatados = base && !esHead(agente.repo, base) ? archivosCommiteadosDesde(agente.repo, base) : [];
-    const relativos = [...new Set([...archivosModificados(agente.repo), ...rescatados])].map((f) =>
-      path.relative(agente.raiz, path.join(agente.repo, f)),
-    );
+    // Un cambio fuera de la carpeta del agente (otro agente, la raíz del repo) no puede
+    // satisfacer su contrato, sea cual sea el patrón: "**/*.md" matchearía "../NOTAS.md".
+    const relativos = [...new Set([...archivosModificados(agente.repo), ...rescatados])]
+      .map((f) => path.relative(agente.raiz, path.join(agente.repo, f)))
+      .filter((f) => !f.startsWith(`..${path.sep}`));
 
     // "si-cambia": solo se exige si la entrega tocó alguno de los disparadores
     const disparadores = agente.contrato?.disparadores ?? [];

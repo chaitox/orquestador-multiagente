@@ -325,6 +325,12 @@ NO RED  "enotfound en minúscula dentro de un texto"
 
 ## Pendientes conocidos
 
+- **El glob exige al menos una carpeta donde va un `**` que no está al final.** `**/*.md` no
+  matchea `requisitos.md` en la raíz del agente (sí `lectura/requisitos.md`), y `docs/**/x.md` no
+  matchea `docs/x.md`. El `**` final sí está bien resuelto (`docs/{feature}/**` matchea
+  `docs/{feature}` y todo lo de adentro). Hoy es teórico: ningún proyecto de `proyectos/` usa `**`
+  al principio ni en el medio de un patrón (2026-10-01). Hay que arreglarlo antes de que alguno lo
+  haga, porque el rechazo es silencioso: el contrato dice "no hay cambios" con el archivo escrito.
 - **`dondeBusque` no prueba lectura, solo existencia.** Si el SDK expone el historial de la sesión,
   cruzar las entradas contra las llamadas a `Read`/`Grep` de ese agente cierra el hueco.
 - **El match de `decisiones.md` es por palabras.** Atrapa las repetidas literales; no atrapa la misma

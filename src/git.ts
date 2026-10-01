@@ -75,8 +75,13 @@ export function ramaActual(repo: string): string {
   return git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]);
 }
 
+/**
+ * true si no hay cambios DENTRO de `repo`. En un monorepo, `repo` puede ser la subcarpeta de un
+ * agente: lo que cambió afuera (otro agente, que vuelve como "../algo") no la ensucia. En el
+ * toplevel no hay nada afuera, así que mira todo el repo, como siempre.
+ */
 export function estaLimpio(repo: string): boolean {
-  return archivosModificados(repo).length === 0;
+  return archivosModificados(repo).every((f) => f.startsWith("../"));
 }
 
 /** Rama base del repo: main, o master si no hay main */
@@ -168,8 +173,12 @@ export function archivosCommiteadosDesde(repo: string, desde: string): string[] 
 
 export function commitTodo(repo: string, mensaje: string): boolean {
   if (estaLimpio(repo)) return false;
-  git(repo, ["add", "-A"]);
-  git(repo, ["commit", "-m", mensaje]);
+  // Solo la carpeta: en un monorepo, `repo` es la subcarpeta de un agente, y sin el pathspec
+  // `add -A` toma el repo entero, con el trabajo de otros agentes y cambios ajenos a la tarea.
+  git(repo, ["add", "-A", "--", "."]);
+  // Con pathspec también en el commit: sin él, se commitea todo lo que ya estaba en el índice,
+  // aunque sea de otra carpeta (algo que alguien agregó a mano o un agente con `git add` por Bash).
+  git(repo, ["commit", "-m", mensaje, "--", "."]);
   return true;
 }
 

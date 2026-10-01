@@ -9,7 +9,7 @@
     "init": "tsx src/init.ts",
     "listar": "tsx src/index.ts --listar",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/*.test.ts",
+    "test": "tsx --test --experimental-test-module-mocks src/*.test.ts",
     "reanudar": "tsx src/reanudar.ts"
   },
   "engines": {

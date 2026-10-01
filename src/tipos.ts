@@ -70,7 +70,12 @@ export interface Agente {
   descripcion: string;
   /** Carpeta donde trabaja. Absoluta, o relativa a `raiz` del proyecto. Es su límite de escritura. */
   raiz: string;
-  /** Repo git al que pertenece. Por defecto, su propia raíz. En monorepo, apuntá todos al mismo. */
+  /**
+   * Carpeta desde la que el orquestador maneja git para este agente. Por defecto, su propia raíz.
+   * En un monorepo NO lo declares: cada agente usa su carpeta, y así el chequeo de limpieza, los
+   * commits y el contrato miran solo lo suyo. Apuntarlo a la raíz del repo hace que sus commits
+   * se lleven los cambios de los demás agentes y cualquier cambio suelto del repo.
+   */
   repo?: string;
   /** Modelo a usar. Por defecto, `modeloPorDefecto` del proyecto. */
   modelo?: string;
