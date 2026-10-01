@@ -1,9 +1,12 @@
-# Servidor de lectura — I-01, I-02, I-03 e I-14
+# Servidor de lectura — I-01 a I-06, I-14
 
 Cubre `I-01` (servidor HTTP + resolución de rutas por lista blanca), `I-02` (inventario de
-proyectos), `I-03` (detalle de un proyecto) e `I-14` (fixtures de los casos que no están en
-disco). El resto del contrato (`I-04` a `I-07`) todavía no está implementado — llega en
-entregas siguientes del mismo agente.
+proyectos), `I-03` (detalle de un proyecto), `I-04` (tareas de un proyecto), `I-05` (detalle
+de una tarea) e `I-06` (decisiones), más `I-14` (fixtures de los casos que no están en
+disco). Las cinco rutas de la fase 1 están cableadas. `I-07` (el documento final con los
+cinco ejemplos pulidos y la lista cerrada de eventos) todavía no está implementado — este
+README va acumulando los ejemplos reales de cada entrega, pero la entrega formal de `I-07`
+es la que lo deja completo.
 
 ## Cómo arrancar (D-7)
 
@@ -265,6 +268,211 @@ servidor arranca con `npm start` dentro de `servidor/`, así que `src/index.ts` 
 servidor** — ver el comentario ahí. Sin eso, `raiz: "."` se resolvía a `servidor/` en vez de
 a la raíz del repo (bug encontrado y corregido durante esta entrega, verificado con el
 `curl` de `interfaz` de arriba).
+
+### `GET /api/proyectos/:nombre/tareas` (I-04)
+
+Lista de tareas del proyecto, de la más reciente a la más vieja por fecha de inicio (D-4).
+`:nombre` se resuelve con el mismo helper de lista blanca que `I-02`/`I-03`
+(`resolverNombreProyecto`); si no está en el inventario, `404`.
+
+Cada entrada es `TareaResumen` o, si el archivo no es JSON válido, `TareaError` (D-10): la
+lista entera sigue devolviendo `200` y el resto de las tareas se ven igual.
+
+```ts
+interface TareaResumen {
+  tareaId: string;
+  feature: string;
+  descripcion: string;
+  estado: string; // en_curso | completada | detenida | aparcada, tolerante a otros valores
+  motivo: string | null; // null si el JSON no trae el campo
+  costoEstimadoUsd: number; // 0 si el JSON no trae el campo
+  solicitudes: number; // 0 si el JSON no trae el campo
+  fechaInicio: string; // historial[0].fecha; mtime del archivo si historial: []
+  fechaFin: string; // historial[historial.length-1].fecha; mismo fallback por mtime
+}
+
+interface TareaError {
+  tareaId: string;
+  error: string; // mensaje de JSON.parse
+}
+```
+
+`GET /api/proyectos/inmobiliaria/tareas` contra el disco real de este repo: 41 entradas, la
+primera (más reciente) es la de `historial[0].fecha` más alta:
+
+```json
+[
+  {
+    "tareaId": "publicaciones-2026-09-23T16-34-01-763Z",
+    "feature": "publicaciones",
+    "descripcion": "Implementá T-12, T-13, T-14 y T-15 sobre la ficha ya existente...",
+    "estado": "completada",
+    "motivo": null,
+    "costoEstimadoUsd": 6.4214,
+    "solicitudes": 0,
+    "fechaInicio": "2026-09-23T16:34:01.847Z",
+    "fechaFin": "2026-09-23T16:50:35.147Z"
+  }
+]
+```
+
+y la última (más vieja) es `publicaciones-2026-09-17T23-33-40-423Z` (`en_curso`, fecha
+`2026-09-17T23:33:40.606Z`). Un ejemplo de `detenida`, también real, con `motivo` poblado
+(el costo trae el ruido de punto flotante tal cual está en el JSON, no se redondea por
+entrada — el redondeo de `I-02` es solo del agregado):
+
+```json
+{
+  "tareaId": "publicaciones-2026-09-22T18-42-58-476Z",
+  "feature": "publicaciones",
+  "descripcion": "Implementá SOLO T-09: el catálogo /propiedades con la grilla...",
+  "estado": "detenida",
+  "motivo": "\"web\" no pudo continuar: T-09 depende de T-08 y T-24 según specs/publicaciones/tareas.md...",
+  "costoEstimadoUsd": 0.30486820000000003,
+  "solicitudes": 0,
+  "fechaInicio": "2026-09-22T18:42:58.569Z",
+  "fechaFin": "2026-09-22T18:45:19.832Z"
+}
+```
+
+Con los fixtures de `I-14` montados (`npm run fixtures:montar`):
+
+- `GET /api/proyectos/fixture-historial-vacio/tareas` da una entrada fechada por el `mtime`
+  del archivo (`fechaInicio === fechaFin === mtime`, no hay `historial[0]` del que sacarla).
+- `GET /api/proyectos/fixture-json-invalido/tareas` da `[{"tareaId": "json-invalido-...",
+  "error": "Bad control character in string literal in JSON at position 220 (line 5 column
+  95)"}]`: una `TareaError`, `200`, sin tumbar nada.
+
+`GET /api/proyectos/noexiste/tareas` → `404` `{"error":"No se encontró el proyecto
+\"noexiste\""}`.
+
+### `GET /api/proyectos/:nombre/tareas/:id` (I-05)
+
+Estado completo de una tarea: cabecera, historial íntegro y `pendiente` si la hay. `:nombre`
+se resuelve igual que arriba; `:id` se resuelve con `resolverArchivoTarea` (D-5: contra el
+`readdir` real de la carpeta del proyecto, nunca contra un string saneado) — si `<id>.json`
+no está ahí, `404` sin leer nada más.
+
+```ts
+interface TareaDetalle {
+  tareaId: string;
+  proyecto: string;
+  feature: string;
+  descripcion: string;
+  estado: string;
+  motivo: string | null;
+  costoEstimadoUsd: number;
+  solicitudes: number;
+  sesiones: Record<string, string>; // agente -> id de sesión
+  ramas: Record<string, string>; // repo -> rama
+  reposParticipantes: string[]; // [] si el JSON no trae el campo (D-10, R-09)
+  pendiente: { pregunta: Pregunta; trabajo: Trabajo } | null; // null si no está aparcada
+  historial: Array<{ fecha: string; evento: string; detalle: unknown }>; // detalle: null si falta
+}
+```
+
+`pendiente` y `detalle` se devuelven tal cual los escribió el orquestador, sin aplanar: los
+campos de la pregunta (`porQue`, `dondeBusque`, `opciones`, `recomendacion`) viven adentro de
+`pendiente.pregunta` (`src/canal.ts:1`), no al tope de `pendiente`.
+
+**`GET /api/proyectos/inmobiliaria/tareas/publicaciones-2026-09-23T16-34-01-763Z`** — el
+ejemplo exacto del criterio de `I-05`: `estado: "completada"`, `costoEstimadoUsd: 6.4214`, 3
+ramas, 3 eventos (`inicio`, `agente_completo`, `completada`), y los campos ausentes en este
+JSON viejo (`motivo`, `reposParticipantes`, `pendiente`) con su valor neutro:
+
+```json
+{
+  "tareaId": "publicaciones-2026-09-23T16-34-01-763Z",
+  "proyecto": "inmobiliaria",
+  "feature": "publicaciones",
+  "descripcion": "Implementá T-12, T-13, T-14 y T-15...",
+  "estado": "completada",
+  "motivo": null,
+  "costoEstimadoUsd": 6.4214,
+  "solicitudes": 0,
+  "sesiones": { "web": "5a02e886-898c-42bb-9413-a2ca6da167a5" },
+  "ramas": {
+    "/Users/<usuario>/Desktop/proyectos/real-state/proyecto/specs": "agente/publicaciones",
+    "/Users/<usuario>/Desktop/proyectos/real-state/proyecto/api": "agente/publicaciones",
+    "/Users/<usuario>/Desktop/proyectos/real-state/proyecto/web": "agente/publicaciones"
+  },
+  "reposParticipantes": [],
+  "pendiente": null,
+  "historial": [
+    { "fecha": "2026-09-23T16:34:01.847Z", "evento": "inicio", "detalle": { "agenteInicial": "web", "ramas": { "...": "agente/publicaciones" } } },
+    { "fecha": "2026-09-23T16:50:35.146Z", "evento": "agente_completo", "detalle": { "agente": "web", "resumen": "..." } },
+    { "fecha": "2026-09-23T16:50:35.147Z", "evento": "completada", "detalle": "Implementadas T-12 (galería)..." }
+  ]
+}
+```
+
+Con los fixtures de `I-14` montados:
+
+- `GET /api/proyectos/fixture-aparcada/tareas/aparcada-2026-01-05T00-00-00-000Z` — la única
+  tarea `aparcada` disponible: `pendiente.pregunta` trae `porQue`, `dondeBusque`, `opciones`
+  y `recomendacion` completos, anidados, y `pendiente.trabajo` la `Solicitud` que los
+  originó.
+- `GET /api/proyectos/fixture-evento-desconocido/tareas/evento-desconocido-2026-01-05T00-00-00-000Z`
+  — el historial trae `migracion_de_esquema`, que no está en la lista cerrada de D-9, con su
+  `detalle` igual presente en crudo (`{"nota": "..."}`); el servidor no filtra ni valida
+  nombres de evento, esa decisión es de la web (D-9).
+
+`GET /api/proyectos/inmobiliaria/tareas/no-existe` → `404`
+`{"error":"No se encontró la tarea \"no-existe\""}`.
+
+### `GET /api/proyectos/:nombre/decisiones` (I-06)
+
+Markdown crudo completo del `decisiones.md` de la raíz del proyecto, más el índice tolerante
+de `parsearDecisiones()` (D-8). `:nombre` se resuelve igual que en las rutas anteriores. Los
+cuatro casos de disco son siempre `200` — nunca `404`, nunca una excepción de filesystem:
+
+```ts
+interface DecisionesProyecto {
+  tieneConfig: boolean;
+  raizExiste: boolean | null; // null si no hay config que resolver
+  markdown: string; // "" si no hay raíz o no hay decisiones.md
+  entradas: EntradaDecision[]; // [] en el mismo caso
+  mensaje: string | null; // explica el vacío; null si hay contenido real
+}
+```
+
+- **`GET /api/proyectos/interfaz/decisiones`** (config con `raiz: "."`, resuelve al
+  `decisiones.md` de la raíz de este repo): `tieneConfig: true`, `raizExiste: true`,
+  `mensaje: null`, `entradas` incluye `DEC-lectura-01` y `DEC-lectura-02`.
+- **`GET /api/proyectos/inmobiliaria/decisiones`** (sin config):
+  ```json
+  { "tieneConfig": false, "raizExiste": null, "markdown": "", "entradas": [], "mensaje": "Este proyecto no tiene configuración: no hay raíz que resolver, así que no hay decisiones." }
+  ```
+- **`GET /api/proyectos/ejemplo-spec/decisiones`** (config con raíz inexistente,
+  `~/dev/demo`):
+  ```json
+  { "tieneConfig": true, "raizExiste": false, "markdown": "", "entradas": [], "mensaje": "La raíz configurada no existe en disco, así que no se puede leer decisiones.md." }
+  ```
+- **Config con raíz existente y sin `decisiones.md`**: `tieneConfig: true`, `raizExiste:
+  true`, `markdown: ""`, `entradas: []`, `mensaje: "Este proyecto todavía no tiene
+  decisiones.md."`. Código y branch verificados por lectura (`fs.existsSync` sobre
+  `path.join(raiz, "decisiones.md")`), pero **no se pudo ejercitar end-to-end contra
+  `prueba`** como pedía el criterio original: ver la nota más abajo.
+
+El parseo tolerante (D-8) se verifica aparte, como función pura, contra
+`servidor/fixtures/decisiones-fuera-de-formato.md` — ver la sección de fixtures.
+
+> **Nota para `spec` — el criterio de `I-06` sobre `prueba` ya no se puede verificar tal como
+> está escrito.** El criterio dice que `prueba` (raíz `/tmp/prueba-orq`) no tiene
+> `decisiones.md` y que por ahí se verifica el caso "config + raíz existente + sin
+> decisiones.md". Al implementar esta entrega, `/tmp/prueba-orq/decisiones.md` **ya existe**
+> (853 bytes, `mtime` de hoy — alguna corrida real del proyecto `prueba` desde que se escribió
+> la spec le preguntó algo al humano y `src/decisiones.ts` lo generó). Hoy
+> `GET /api/proyectos/prueba/decisiones` da `200` con contenido real (`DEC-test-e-01` en el
+> índice), no el caso vacío. El código de la rama "sin decisiones.md" está escrito y es
+> correcta por lectura (un `fs.existsSync` más antes de leer el archivo), pero no hay en este
+> repo, hoy, ningún proyecto con config y raíz existente que le falte `decisiones.md` para
+> ejercitarla end-to-end — es el mismo patrón que `DEC-lectura-02` para los contadores de
+> tareas: el disco de `prueba` sigue corriendo y lo que el criterio asumía vacío, dejó de
+> estarlo.
+
+`GET /api/proyectos/noexiste/decisiones` → `404` `{"error":"No se encontró el proyecto
+\"noexiste\""}`.
 
 ### Cualquier otra ruta
 
