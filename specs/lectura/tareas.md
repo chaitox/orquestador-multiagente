@@ -211,7 +211,9 @@ mostrar, cuatro no aparecen en ningún JSON de `.orquestador/` —`solicitud_rec
 cubre. `I-11` ya nombra `verificacion_fallida` en su criterio, así que hoy ese criterio no se
 puede verificar con nada.
 
-Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma aparte.
+Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma aparte. Lo único
+que sí le corrige es un `detalle` mal formado en uno de sus cuatro fixtures, encontrado al revisar
+esta tarea contra `registrar()` — último criterio de acá.
 
 **Criterio de aceptación**
 
@@ -226,8 +228,17 @@ Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma a
   que ninguno, porque hace pasar un criterio que con datos reales falla.
 - Se monta y se borra con los mismos comandos de `I-14`, y después de borrarlos
   `GET /api/proyectos` vuelve a devolver exactamente los seis proyectos de `I-02`.
-- No modifica, renombra ni borra ningún archivo real de `.orquestador/` (D-11), ni toca los
-  cuatro fixtures ya entregados en `I-14`.
+- No modifica, renombra ni borra ningún archivo real de `.orquestador/` (D-11).
+- **Corrige el `detalle` del evento `aparcada` en el fixture de `I-14`** (encontrado al revisar
+  esta tarea). `scripts/fixtures.ts` lo escribe como objeto —`{ motivo, pregunta }`— y
+  `src/orquestador.ts:148` lo escribe como **string pelado**: el id de la pregunta
+  (`sinResponder.pregunta.id`). D-9 ya lista `aparcada` entre los seis de detalle string, así que
+  el fixture inventó una forma que el orquestador nunca produce. Es la única excepción a "no toca
+  los fixtures de `I-14`", y va acá y no en una tarea nueva porque es exactamente el error que
+  `I-15` existe para no cometer. Los otros tres fixtures quedan como están: se revisaron evento
+  por evento contra `registrar()` y el resto coincide.
+- Ningún otro fixture de `I-14` cambia de forma, de nombre ni de carpeta: `I-05` y `I-11` ya citan
+  esos archivos.
 - `servidor/docs/lectura/` suma este fixture a la tabla de qué caso cubre cada uno, diciendo que
   el criterio que lo consume es el de `I-11`.
 

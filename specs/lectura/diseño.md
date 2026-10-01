@@ -173,6 +173,14 @@ pedía se corrigió, y el fixture de `I-15` copia la forma del código en vez de
 un fixture con un `salida` que el orquestador nunca escribe haría pasar una pantalla que con datos
 reales queda vacía, que es el modo de falla que los fixtures vienen a evitar.
 
+**Y el fixture de `aparcada` de `I-14` cayó justo en ese modo de falla** (encontrado al revisar
+`I-15`): `scripts/fixtures.ts` le puso al evento `aparcada` un `detalle` de objeto
+(`{ motivo, pregunta }`) cuando `src/orquestador.ts:148` escribe el id de la pregunta pelado. La
+lista de los seis de arriba no cambia —era correcta—; lo que estaba mal era el fixture, y se
+corrige en `I-15`. Vale como confirmación de que la lista de seis hay que leerla del código y no
+de los datos de prueba: el único evento `aparcada` disponible en todo el repo venía de un fixture,
+y venía con la forma equivocada.
+
 ### D-10 · El esquema del estado se lee como parcial
 
 Los JSON en disco vienen de versiones distintas: los de septiembre no tienen

@@ -175,6 +175,16 @@ habría quedado vacía con los datos reales. De ahí la regla de `I-15`: la form
 copia del `registrar()` que la escribe, y si no coincide con lo que pide un criterio, lo que se
 corrige es el criterio.
 
+Esa regla ya atrapó un caso con el fixture **puesto**, no solo con el criterio: el fixture de la
+tarea aparcada de `I-14` escribe el evento `aparcada` con un `detalle` de objeto
+(`{ motivo, pregunta }`) y el orquestador lo escribe como string pelado, el id de la pregunta
+(`src/orquestador.ts:148`, y D-9 lo lista entre los seis de string). Una pantalla construida
+contra ese fixture habría mostrado una tabla de campos que con datos reales queda vacía —el mismo
+modo de falla, en el mismo evento que `I-11` usa para verificar el caso aparcada—. Se corrige en
+`I-15`. La conclusión que vale para lo que queda: un fixture no es correcto porque haga pasar el
+criterio, sino porque coincide con el código que escribe el dato, y eso se revisa evento por
+evento.
+
 Al implementar `I-06` se sumó a esa lista un caso más, de decisiones y no de tareas: un proyecto
 con config, raíz existente y sin `decisiones.md` (ver R-05). Estaba en disco cuando se escribió
 la spec y dejó de estar, porque una corrida real escribió el archivo que faltaba. **El disco es
