@@ -6,9 +6,9 @@ implementa y cuándo está hecha.
 Referencias: [requisitos.md](./requisitos.md) · [diseño.md](./diseño.md)
 
 **Orden.** `I-01` antes que el resto del servidor. `I-14` antes de `I-04`, `I-05` y `I-06`: son
-los datos que esos criterios necesitan y que el disco no tiene. `I-07` antes de que la web toque
-datos reales (`I-10` en adelante): es el contrato que la web lee. `I-08` puede ir en paralelo con
-todo el servidor.
+los datos que esos criterios necesitan y que el disco no tiene. `I-15` antes de `I-11`, por el
+mismo motivo. `I-07` antes de que la web toque datos reales (`I-10` en adelante): es el contrato
+que la web lee. `I-08` puede ir en paralelo con todo el servidor.
 
 **Regla que vale para todos los criterios de esta feature.** Ninguno se verifica editando,
 renombrando ni corrompiendo un archivo real de `.orquestador/`. Los casos que no están en disco
@@ -166,6 +166,9 @@ Los datos de prueba de los casos que el disco de este repo no tiene. Los usan lo
 
 Verificado sobre los 49 JSON que había en `.orquestador/` al escribir esta spec: ninguno está
 `aparcada`, ninguno tiene `pendiente`, ninguno tiene historial vacío y ninguno es JSON inválido.
+Re-verificado al entregar la tarea, ya con 50 archivos: las cuatro propiedades siguen valiendo, y
+los estados en disco siguen siendo `completada`, `en_curso` y `detenida`. El total crece con cada
+corrida, así que es un número que se vuelve a contar, no uno que se cita.
 Una corrida futura podría dejar una tarea `aparcada` de verdad, pero ningún criterio depende de
 que eso pase: para eso están los fixtures.
 
@@ -183,6 +186,30 @@ que eso pase: para eso están los fixtures.
 - `servidor/docs/lectura/` dice qué caso cubre cada fixture y con qué criterio se corresponde, e
   incluye la respuesta de ejemplo del markdown fuera de formato: `I-12` la necesita para poder
   verificarse sin un proyecto real que la produzca.
+
+### I-15 · Fixture de los eventos de D-9 que no están en disco
+
+**Agente:** servidor · **Requisitos:** R-04, R-09 · **Diseño:** D-9, D-11
+
+Sale de verificar `I-14` contra el disco: de los trece eventos que D-9 declara y que R-04 pide
+mostrar, cuatro no aparecen en ningún JSON de `.orquestador/` —`solicitud_rechazada`,
+`verificacion_fallida`, `corte_de_red` y `recordatorio_de_cierre`— y ningún fixture de `I-14` los
+cubre. `I-11` ya nombra `verificacion_fallida` en su criterio, así que hoy ese criterio no se
+puede verificar con nada.
+
+Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma aparte.
+
+**Criterio de aceptación**
+
+- Una carpeta `.orquestador/fixture-<caso>/` más, con una tarea cuyo historial incluya los
+  cuatro eventos, cada uno con el `detalle` de la forma que escribe `registrar()` en
+  `src/orquestador.ts` — no inventado: la forma se copia del código que lo escribe.
+- Se monta y se borra con los mismos comandos de `I-14`, y después de borrarlos
+  `GET /api/proyectos` vuelve a devolver exactamente los seis proyectos de `I-02`.
+- No modifica, renombra ni borra ningún archivo real de `.orquestador/` (D-11), ni toca los
+  cuatro fixtures ya entregados en `I-14`.
+- `servidor/docs/lectura/` suma este fixture a la tabla de qué caso cubre cada uno, diciendo que
+  el criterio que lo consume es el de `I-11`.
 
 ---
 
@@ -249,8 +276,10 @@ orden.
   completa, US$ 6.42, las 3 ramas y los 3 eventos del historial.
 - Los eventos de la lista de D-9 se presentan cada uno con su detalle legible: una `solicitud`
   muestra origen, destino, problema y esperado; una `entrega`, resumen, archivos y los ids de
-  tareas citados; una `verificacion_fallida`, el comando y su salida; `preguntas`, cada
-  pregunta con su respuesta.
+  tareas citados; `preguntas`, cada pregunta con su respuesta. Esos tres salen de datos reales
+  de `inmobiliaria`. Una `verificacion_fallida` muestra el comando y su salida, pero **en disco
+  no hay ninguna**: se verifica con el fixture de `I-15`, igual que `solicitud_rechazada`,
+  `corte_de_red` y `recordatorio_de_cierre`.
 - Un evento con un nombre fuera de esa lista se muestra genérico (fecha, nombre, detalle en
   crudo) y no rompe la vista (D-9), verificado con el fixture de evento desconocido de `I-14`.
 - Si la tarea está aparcada, la pregunta pendiente aparece **antes** que el resto, completa

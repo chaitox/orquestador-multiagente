@@ -140,9 +140,18 @@ pantalla ni la lista entera.
 archivos tenga `reposParticipantes`.
 
 De estos casos, los que **no están** en el disco de este repo son: una tarea `aparcada`, una con
-`pendiente`, una con historial vacío y un JSON inválido. Se verifican con los fixtures de
-**D-11**, y nunca editando ni corrompiendo un archivo real de `.orquestador/`: no están
-versionados, así que lo que se rompe ahí no se recupera.
+`pendiente`, una con historial vacío, un JSON inválido y un evento de historial con un nombre
+fuera de la lista de D-9. Se verifican con los fixtures de **D-11**, y nunca editando ni
+corrompiendo un archivo real de `.orquestador/`: no están versionados, así que lo que se rompe
+ahí no se recupera.
+
+Tampoco hay en disco un ejemplo de cuatro de los trece eventos que D-9 declara y que R-04 pide
+mostrar: `solicitud_rechazada`, `verificacion_fallida`, `corte_de_red` y
+`recordatorio_de_cierre`. Los ocho que sí aparecen son `inicio`, `solicitud`, `entrega`,
+`preguntas`, `rescate`, `agente_completo`, `detenida` y `completada`; el noveno, `aparcada` como
+evento, lo aporta el fixture de la tarea aparcada. Los cuatro que faltan van por fixture
+también (`I-15`): un criterio que nombra un evento del que no hay un solo dato en disco no se
+puede verificar.
 
 ## R-10 · Estados de carga, vacío y error
 
