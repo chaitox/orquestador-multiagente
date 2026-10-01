@@ -447,8 +447,18 @@ function prepararRepoDeAgente(
   estado.reposParticipantes.push(a.repo);
 }
 
-/** Ids del tipo T-01, P-07, MI-16, S-13 mencionados después de "depende de" */
-const IDS_DEPENDENCIA = /depende(?:n)? de[^.]*?\b([A-Z]{1,3}-\d{1,3})/gi;
+/** La frase que sigue a "depende de", hasta el punto: puede nombrar varios ids */
+const FRASE_DEPENDENCIA = /depende(?:n)? de([^.]*)/gi;
+/** Ids del tipo T-01, P-07, MI-16, S-13. `(?!\d)`: "pre-2024" no es un id, ni se corta en PRE-202 */
+const ID_TAREA = /\b([A-Z]{1,3}-\d{1,3})(?!\d)/gi;
+
+/** Todos los ids que la descripción nombra como dependencias, en mayúscula y sin repetir */
+export function idsDeDependencia(descripcion: string): string[] {
+  const ids = [...descripcion.matchAll(FRASE_DEPENDENCIA)].flatMap((frase) =>
+    [...frase[1].matchAll(ID_TAREA)].map((m) => m[1].toUpperCase()),
+  );
+  return [...new Set(ids)];
+}
 
 /**
  * Avisa si la tarea dice depender de ids que no aparecen citados en ningún commit de los
@@ -459,7 +469,7 @@ const IDS_DEPENDENCIA = /depende(?:n)? de[^.]*?\b([A-Z]{1,3}-\d{1,3})/gi;
  * que un agente descubriera a mitad de camino que su dependencia no estaba hecha.
  */
 function avisarDependenciasFaltantes(p: ProyectoResuelto, descripcion: string) {
-  const ids = [...new Set([...descripcion.matchAll(IDS_DEPENDENCIA)].map((m) => m[1].toUpperCase()))];
+  const ids = idsDeDependencia(descripcion);
   if (ids.length === 0) return;
 
   const repos = [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo);

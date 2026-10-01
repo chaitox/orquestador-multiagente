@@ -129,11 +129,21 @@ export function commitTodo(repo: string, mensaje: string): boolean {
 /**
  * ¿Hay algún commit en este repo cuyo mensaje cite `id`?
  * Se usa para avisar si una tarea dice depender de algo que no parece estar hecho.
+ *
+ * El id tiene que aparecer suelto, sin letras ni dígitos pegados de ningún lado: si no, un
+ * commit con MP-07 hace pasar a P-07, y uno con T-10 a T-1. Sin distinguir mayúsculas,
+ * igual que la extracción de la descripción: un commit que escribió s-13 cita S-13.
  */
 export function idCitadoEnCommits(repo: string, id: string): boolean {
+  const patron = `(^|[^A-Za-z0-9])${escaparERE(id)}([^A-Za-z0-9]|$)`;
   try {
-    return git(repo, ["log", "--grep", id, "--fixed-strings", "--format=%H", "-1"]) !== "";
+    return git(repo, ["log", "-E", "-i", "--grep", patron, "--format=%H", "-1"]) !== "";
   } catch {
     return false;
   }
+}
+
+/** Escapa los caracteres especiales de una expresión regular extendida POSIX (la de `git log -E`) */
+function escaparERE(texto: string): string {
+  return texto.replace(/[.^$*+?()[\]{}|\\]/g, "\\$&");
 }
