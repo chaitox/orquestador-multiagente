@@ -130,21 +130,28 @@ export function asegurarRama(repo: string, rama: string) {
   }
 }
 
-/** Marca que lleva el commit de rescate de una tarea que no llegó a cerrar */
+/** Marca con la que EMPIEZA el asunto del commit de rescate de una tarea que no llegó a cerrar */
 export const MARCA_SIN_VERIFICAR = "SIN-VERIFICAR";
+
+/**
+ * Un rescate es un commit cuyo asunto empieza con la marca, que es como lo escribe `detener`.
+ * Buscarla en cualquier parte del asunto contaba como rescate a un commit que solo la menciona:
+ * medido con "verificado: 3a99578 revisado (rescate SIN-VERIFICAR)".
+ */
+const esRescate = (asunto: string) => asunto.startsWith(MARCA_SIN_VERIFICAR);
 
 /** true si el último commit del repo es un rescate que nunca pasó el contrato */
 export function ultimoCommitSinVerificar(repo: string): boolean {
   try {
-    return git(repo, ["log", "-1", "--format=%s"]).includes(MARCA_SIN_VERIFICAR);
+    return esRescate(git(repo, ["log", "-1", "--format=%s"]));
   } catch {
     return false;
   }
 }
 
 /**
- * Primer commit, recorriendo el log hacia atrás desde HEAD, cuyo asunto NO lleva la marca
- * SIN-VERIFICAR: el último punto que pasó el contrato. null si no hay commits o todos la llevang.
+ * Primer commit, recorriendo el log hacia atrás desde HEAD, que no es un rescate SIN-VERIFICAR:
+ * el último punto que pasó el contrato. null si no hay commits o todos son rescates.
  */
 export function baseVerificada(repo: string): string | null {
   let log: string;
@@ -156,7 +163,7 @@ export function baseVerificada(repo: string): string | null {
   for (const linea of log.split("\n")) {
     const tab = linea.indexOf("\t");
     if (tab === -1) continue;
-    if (!linea.slice(tab + 1).includes(MARCA_SIN_VERIFICAR)) return linea.slice(0, tab);
+    if (!esRescate(linea.slice(tab + 1))) return linea.slice(0, tab);
   }
   return null;
 }

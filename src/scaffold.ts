@@ -192,6 +192,12 @@ function escribirClaudeMd(a: AgenteResuelto, p: ProyectoResuelto) {
   const destino = path.join(a.raiz, "CLAUDE.md");
   if (fs.existsSync(destino)) return;
 
+  fs.writeFileSync(destino, contenidoClaudeMd(a, p));
+  console.log("    CLAUDE.md creado");
+}
+
+/** El CLAUDE.md inicial de un agente: sus reglas, su contrato y cómo se verifica su trabajo */
+export function contenidoClaudeMd(a: AgenteResuelto, p: ProyectoResuelto): string {
   const convenciones = a.convenciones
     ? fs.readFileSync(path.join(DIR_PROMPTS, a.convenciones), "utf8").trim()
     : "";
@@ -206,13 +212,16 @@ function escribirClaudeMd(a: AgenteResuelto, p: ProyectoResuelto) {
     "- No hagas commits, push ni cambios de rama: los maneja el orquestador.",
     "- Si algo depende de otra parte del sistema, pedilo con `solicitar_a` en vez de resolverlo acá.",
     contrato.length ? `- Toda entrega requiere actualizar: ${contrato.join(", ")}` : "",
-    a.verificacion.length ? `- Antes de cerrar: ${a.verificacion.join(" && ")}` : "",
+    // Cada verificación puede ser un comando suelto o { comando, reintentar }: unir los objetos
+    // directamente imprimía "[object Object]"
+    a.verificacion.length
+      ? `- Antes de cerrar: ${a.verificacion.map((v) => (typeof v === "string" ? v : v.comando)).join(" && ")}`
+      : "",
     "",
     convenciones || "## Notas del proyecto\n(completar: convenciones, estructura, comandos útiles)",
   ]
     .filter(Boolean)
     .join("\n");
 
-  fs.writeFileSync(destino, `${contenido}\n`);
-  console.log("    CLAUDE.md creado");
+  return `${contenido}\n`;
 }

@@ -8,7 +8,14 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { archivosCommiteadosDesde, archivosModificados, commitTodo, estaLimpio } from "./git.js";
+import {
+  archivosCommiteadosDesde,
+  archivosModificados,
+  baseVerificada,
+  commitTodo,
+  estaLimpio,
+  ultimoCommitSinVerificar,
+} from "./git.js";
 
 describe("archivosModificados en un monorepo", () => {
   let repo: string;
@@ -129,5 +136,37 @@ describe("commitTodo en un monorepo", () => {
     assert.deepEqual(git("show", "--name-only", "--format=", "HEAD").split("\n"), ["servidor/api.ts"]);
     assert.equal(estaLimpio(path.join(repo, "specs")), false, "lo de specs sigue sin commitear");
     assert.equal(git("diff", "--cached", "--name-only"), "NOTAS.md", "NOTAS.md sigue en el índice, sin commitear");
+  });
+});
+
+describe("detección de rescates SIN-VERIFICAR", () => {
+  let repo: string;
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  const commit = (asunto: string) => {
+    git("commit", "-q", "--allow-empty", "-m", asunto);
+    return git("rev-parse", "HEAD");
+  };
+
+  before(() => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "orq-rescates-"));
+    git("init", "-q");
+    git("config", "user.email", "test@test");
+    git("config", "user.name", "test");
+    commit("base");
+  });
+
+  after(() => fs.rmSync(repo, { recursive: true, force: true }));
+
+  it("un rescate es un commit cuyo asunto empieza con la marca", () => {
+    const base = git("rev-parse", "HEAD");
+    commit("SIN-VERIFICAR: la tarea se detuvo antes de cerrar — motivo");
+    assert.equal(ultimoCommitSinVerificar(repo), true);
+    assert.equal(baseVerificada(repo), base);
+  });
+
+  it("un commit que solo menciona la marca no es un rescate", () => {
+    const constancia = commit("verificado: 3a99578 revisado (rescate SIN-VERIFICAR)");
+    assert.equal(ultimoCommitSinVerificar(repo), false);
+    assert.equal(baseVerificada(repo), constancia);
   });
 });
