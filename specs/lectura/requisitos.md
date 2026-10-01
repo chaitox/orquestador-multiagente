@@ -101,6 +101,13 @@ Un proyecto sin config no tiene raíz que resolver y por lo tanto no tiene decis
 con esas palabras, no con un error. Un proyecto con config y sin `decisiones.md` muestra un
 vacío explicado, tampoco un error.
 
+**Lo que el disco ya no da** (encontrado al implementar `I-06`): el caso "config, raíz existente
+y sin `decisiones.md`" dejó de existir en este repo. `prueba` lo cubría hasta que una corrida
+real escribió `/tmp/prueba-orq/decisiones.md` el 2026-10-01 a las 08:49, y de los cinco
+proyectos con config no queda ninguno que lo cumpla: `interfaz` y `prueba` tienen su
+`decisiones.md`, y los tres `ejemplo-*` tienen la raíz inexistente. El requisito no cambia —esa
+rama se sigue pidiendo—; lo que cambia es con qué se verifica, y va por `I-16` (D-11).
+
 ## R-06 · Nada de esto escribe
 
 Mientras corre la interfaz, ningún archivo del repo ni de las raíces de los proyectos cambia.
@@ -156,6 +163,15 @@ mostrar: `solicitud_rechazada`, `verificacion_fallida`, `corte_de_red` y
 evento, lo aporta el fixture de la tarea aparcada. Los cuatro que faltan van por fixture
 también (`I-15`): un criterio que nombra un evento del que no hay un solo dato en disco no se
 puede verificar.
+
+Al implementar `I-06` se sumó a esa lista un caso más, de decisiones y no de tareas: un proyecto
+con config, raíz existente y sin `decisiones.md` (ver R-05). Estaba en disco cuando se escribió
+la spec y dejó de estar, porque una corrida real escribió el archivo que faltaba. **El disco es
+un blanco móvil** —ya había pasado con los contadores de tareas de **DEC-lectura-02**—, así que
+un criterio que cita una foto del disco se escribe nombrando la propiedad que necesita y cómo
+volver a buscarla, no solo el número o el proyecto que la cumplía ese día. Un criterio que cita
+un proyecto por nombre y además depende de que a ese proyecto le *falte* un archivo es el que
+caduca más rápido: lo que falta se crea solo.
 
 ## R-10 · Estados de carga, vacío y error
 

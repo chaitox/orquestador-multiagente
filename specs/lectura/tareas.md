@@ -7,8 +7,9 @@ Referencias: [requisitos.md](./requisitos.md) · [diseño.md](./diseño.md)
 
 **Orden.** `I-01` antes que el resto del servidor. `I-14` antes de `I-04`, `I-05` y `I-06`: son
 los datos que esos criterios necesitan y que el disco no tiene. `I-15` antes de `I-11`, por el
-mismo motivo. `I-07` antes de que la web toque datos reales (`I-10` en adelante): es el contrato
-que la web lee. `I-08` puede ir en paralelo con todo el servidor.
+mismo motivo. `I-16` después de `I-06`: nace de implementarlo. `I-07` antes de que la web toque
+datos reales (`I-10` en adelante): es el contrato que la web lee. `I-08` puede ir en paralelo con
+todo el servidor.
 
 **Regla que vale para todos los criterios de esta feature.** Ninguno se verifica editando,
 renombrando ni corrompiendo un archivo real de `.orquestador/`. Los casos que no están en disco
@@ -142,10 +143,16 @@ Markdown crudo completo más el índice de entradas parseado de forma tolerante.
   la API no puede servir porque ese proyecto no tiene config (D-8, D-11).
 - Proyecto sin config (`inmobiliaria`): `200` diciendo que no hay raíz que resolver, no `404`
   (R-05).
-- Proyecto con config, raíz existente y sin `decisiones.md` (`prueba`, raíz `/tmp/prueba-orq`):
-  `200` con contenido vacío, no `404`.
+- Proyecto con config y raíz absoluta fuera del repo (`prueba`, raíz `/tmp/prueba-orq`): `200`
+  sirviendo el `decisiones.md` **de esa raíz**, no el de la raíz del repo. Junto con `interfaz`,
+  que tiene `raiz: "."` y es el que se rompe si el cwd está mal fijado, cubre los dos modos de
+  resolución de raíz que el config admite (D-3).
 - Proyecto con config y raíz inexistente (`ejemplo-spec`): `200` que lo dice, no un `404` ni una
   excepción de filesystem.
+- El caso "config, raíz existente y **sin** `decisiones.md`" **no es criterio de esta tarea**:
+  dejó de estar en disco. `prueba` lo cubría cuando se escribió la spec y una corrida real le
+  escribió el archivo (2026-10-01 08:49). La rama se sigue pidiendo en R-05 y se verifica en
+  `I-16`.
 
 ### I-07 · Documentar el contrato en `servidor/docs/lectura/`
 
@@ -217,6 +224,33 @@ Va antes de `I-11`. No reemplaza a `I-14` ni le cambia los criterios: los suma a
   cuatro fixtures ya entregados en `I-14`.
 - `servidor/docs/lectura/` suma este fixture a la tabla de qué caso cubre cada uno, diciendo que
   el criterio que lo consume es el de `I-11`.
+
+### I-16 · Fixture de la rama "raíz existente y sin `decisiones.md`"
+
+**Agente:** servidor · **Requisitos:** R-05, R-09 · **Diseño:** D-8, D-11
+
+Sale de implementar `I-06`. De los tres vacíos que R-05 pide informar con palabras en vez de con
+un error, dos los ejercita un proyecto real —`inmobiliaria` sin config y `ejemplo-spec` con raíz
+inexistente— y el tercero se quedó sin ninguno: `prueba` lo cubría hasta que una corrida real
+escribió `/tmp/prueba-orq/decisiones.md`. Hoy esa rama está escrita y nada la ejecuta.
+
+Va después de `I-06`. No le cambia los criterios ni los ids: los suma aparte.
+
+**Criterio de aceptación**
+
+- La lectura de decisiones a partir de una raíz **ya resuelta** es invocable con una ruta, aparte
+  de la resolución de nombre de proyecto → raíz. Los cuatro casos de disco de `I-06` siguen
+  respondiendo exactamente lo mismo que antes de la separación, verificado volviendo a pedir las
+  cuatro respuestas y comparándolas.
+- Hay una carpeta dentro de `servidor/fixtures/` que existe y **no** tiene `decisiones.md`, con
+  algún archivo adentro que explique qué es —una carpeta vacía no queda versionada—, y la lectura
+  apuntada ahí devuelve contenido vacío con el mensaje de que no hay `decisiones.md`, sin lanzar.
+- La misma función apuntada a una ruta que no existe devuelve la marca de raíz inexistente, no una
+  excepción de filesystem.
+- `npx tsc --noEmit` pasa y la carpeta de fixture no hace aparecer ningún proyecto nuevo en
+  `GET /api/proyectos`: vive en `servidor/fixtures/`, no en `.orquestador/`.
+- `servidor/docs/lectura/` dice qué rama cubre este fixture y por qué no hay proyecto real que la
+  produzca, reemplazando la nota abierta que dejó `I-06`.
 
 ---
 

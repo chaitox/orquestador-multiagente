@@ -197,10 +197,46 @@ Dos consecuencias que hay que respetar:
 porque la raíz sale de ahí, y crear un `proyectos/*.ts` cae fuera de la carpeta del agente que
 implementa. Así que se parte en dos: el parseo tolerante es una función pura sobre el texto del
 markdown y se verifica contra un archivo de muestra en `servidor/fixtures/`, dentro de la carpeta
-del agente; el cableado del endpoint se verifica con los cuatro casos que el disco **sí** da —
-`interfaz` (config con `raiz: "."`, sirve el `decisiones.md` de la raíz del repo), `prueba`
-(config con raíz existente, `/tmp/prueba-orq`, y sin `decisiones.md`), `inmobiliaria` (sin
-config, sin raíz que resolver) y `ejemplo-spec` (config con raíz inexistente).
+del agente; el cableado del endpoint se verifica con los casos que el disco **sí** da.
+
+**Los casos de disco de `I-06`, corregidos al implementarlo.** La enumeración anterior daba
+cuatro y daba uno mal: decía que `prueba` servía para el caso "config, raíz existente, sin
+`decisiones.md`", y hoy `/tmp/prueba-orq/decisiones.md` existe (lo escribió una corrida real el
+2026-10-01 08:49). Siguen siendo los mismos cuatro proyectos, pero `prueba` cambió de rol:
+
+| Caso | Proyecto | Qué ejercita |
+| --- | --- | --- |
+| Config, raíz relativa al cwd, con `decisiones.md` | `interfaz` (`raiz: "."`) | El `decisiones.md` de la raíz del repo, y la trampa del cwd de D-3 |
+| Config, raíz absoluta fuera del repo, con `decisiones.md` | `prueba` (`/tmp/prueba-orq`) | Que la raíz resuelta se respete y no se sirva el archivo del repo |
+| Sin config | `inmobiliaria` | `200` "no hay raíz que resolver" |
+| Config con raíz inexistente | `ejemplo-spec` | `200` que lo dice, sin excepción de filesystem |
+
+El cambio de rol de `prueba` no es una pérdida: `interfaz` y `prueba` cubren ahora los dos modos
+de resolución de raíz que el config admite —relativa al cwd y absoluta—, y ese par detecta un cwd
+mal fijado comparando las dos respuestas, que es el modo de falla que D-3 llama el peor. El caso
+vacío que `prueba` cubría antes se verifica igual, en `I-16`.
+
+**La rama que quedó sin disco: "raíz existente y sin `decisiones.md`".** R-05 la sigue pidiendo y
+el código la tiene (un `existsSync` antes de leer), pero ningún proyecto de este repo la produce.
+
+**Decidido:** se parte igual que el parseo tolerante. La lectura de decisiones a partir de una
+raíz **ya resuelta** queda invocable con una ruta, separada de la resolución nombre → raíz, y se
+apunta a una carpeta de fixture sin `decisiones.md` dentro de `servidor/fixtures/`. Queda en la
+carpeta del agente que lo implementa, no necesita config nueva y no depende de que a un proyecto
+real le siga faltando un archivo. Es `I-16`.
+
+**Descartado:** un proyecto de fixture con config, que es la primera opción que aparece. La raíz
+sale del config, así que haría falta un `proyectos/<nombre>.ts`, y `proyectos/` no está en la
+carpeta de ninguno de los tres agentes: nadie puede escribirlo sin que le amplíen el alcance. Eso
+es una decisión, no una tarea.
+
+**Descartado:** darla por verificada leyendo el código. Es correcta por lectura —se revisó—, pero
+un criterio que no se puede ejercitar deja de distinguir el código que funciona del que compila,
+y esta feature ya tiene cuatro criterios que viven de fixtures justamente para no caer en eso.
+
+**Descartado:** borrar o mover `/tmp/prueba-orq/decisiones.md` para que el caso vuelva. Es un
+archivo de decisiones escrito por una corrida real; D-11 no muta datos reales para verificar, y la
+regla no cambia porque el archivo esté en `/tmp` y no en `.orquestador/`.
 
 **Descartado:** darle al servidor una variable para apuntar `.orquestador/` a otra carpeta en
 las pruebas. Es configuración nueva que después hay que mantener sincronizada, y el manual pide
