@@ -74,6 +74,8 @@ export interface Agente {
   repo?: string;
   /** Modelo a usar. Por defecto, `modeloPorDefecto` del proyecto. */
   modelo?: string;
+  /** Tope de turnos internos por ejecución de este agente. Por defecto, `maxTurnos` del proyecto. */
+  maxTurnos?: number;
   /** Archivo .md con las instrucciones propias del agente (relativo a prompts/). */
   prompt: string;
   /** Carpetas extra que puede LEER (contratos de otros agentes). Relativas a `raiz` del proyecto. */

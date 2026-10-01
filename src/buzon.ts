@@ -76,6 +76,10 @@ export interface EstadoTarea {
   /** Pregunta sin responder que dejó la tarea aparcada */
   pendiente?: { pregunta: Pregunta; trabajo: Trabajo };
   ramas: Record<string, string>;
+  /** Repos git de los agentes despachados en esta tarea; el commit de rescate recorre solo estos */
+  reposParticipantes: string[];
+  /** Repos sin git ya avisados, para no repetir el aviso en cada despacho */
+  avisadosSinRepo?: string[];
   historial: Array<{ fecha: string; evento: string; detalle?: unknown }>;
 }
 
@@ -91,6 +95,7 @@ export function crearEstado(proyecto: string, feature: string, descripcion: stri
     sesiones: {},
     cola: [],
     ramas: {},
+    reposParticipantes: [],
     historial: [],
   };
 }

@@ -92,7 +92,7 @@ export function ultimoCommitSinVerificar(repo: string): boolean {
 
 /**
  * Primer commit, recorriendo el log hacia atrás desde HEAD, cuyo asunto NO lleva la marca
- * SIN-VERIFICAR: el último punto que pasó el contrato. null si no hay commits o todos la llevan.
+ * SIN-VERIFICAR: el último punto que pasó el contrato. null si no hay commits o todos la llevang.
  */
 export function baseVerificada(repo: string): string | null {
   let log: string;

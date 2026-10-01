@@ -104,7 +104,7 @@ export function opcionesDe(
     cwd: a.raiz,
     model: a.modelo,
     resume,
-    maxTurns: p.maxTurnos,
+    maxTurns: a.maxTurnos ?? p.maxTurnos,
     // Carga CLAUDE.md, .claude/rules, .claude/skills y .claude/agents desde cwd (la raíz del agente)
     settingSources: a.ajustes,
     systemPrompt: {

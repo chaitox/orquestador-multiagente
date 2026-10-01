@@ -60,7 +60,7 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
     );
   }
 
-  prepararRepos(p, estado, o.feature);
+  prepararRepoDeAgente(p, estado, o.feature, inicial.id);
 
   const cola: Trabajo[] = o.continuar
     ? [{ ...o.continuar.trabajo, tipo: "retorno", mensaje: o.continuar.mensaje, solicitud: undefined }, ...o.continuar.cola]
@@ -99,7 +99,8 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
     // El trabajo hecho no se pierde, pero el commit dice que NO pasó el contrato ni
     // las verificaciones: si no, la próxima corrida lo da por bueno.
     if (p.git.commitAlCerrar) {
-      for (const repo of [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo)) {
+      // Solo los repos que participaron en esta tarea: los demás no los tocó nadie.
+      for (const repo of estado.reposParticipantes) {
         const rescatado = commitTodo(repo, `${MARCA_SIN_VERIFICAR}: la tarea se detuvo antes de cerrar — ${motivo.slice(0, 80)}`);
         if (rescatado) {
           console.warn(`\x1b[33m   ⚠ trabajo sin verificar commiteado en ${repo}\x1b[0m`);
@@ -111,6 +112,15 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
 
   while (cola.length > 0 && estado.estado === "en_curso") {
     const trabajo = cola.shift()!;
+    // Preparar un repo a mitad de tarea puede fallar (repo sucio, conflicto al actualizar la
+    // rama). Si la excepción saliera del bucle, el trabajo de los agentes anteriores no pasaría
+    // por el rescate y la tarea no quedaría registrada como detenida.
+    try {
+      prepararRepoDeAgente(p, estado, o.feature, trabajo.agente);
+    } catch (e) {
+      detener(`No se pudo preparar el repo de "${trabajo.agente}": ${e instanceof Error ? e.message : String(e)}`);
+      break;
+    }
     const agente = buscarAgente(p, trabajo.agente);
 
     buzon.limpiarTurno();
@@ -390,30 +400,49 @@ const promptRetorno = (e: { solicitudId: string; resumen: string; archivos: stri
 
 /* -------------------------------- git -------------------------------- */
 
-function prepararRepos(p: ProyectoResuelto, estado: EstadoTarea, feature: string) {
-  // Un repo que no es repo se saltea en silencio y el agente trabaja sin rama ni commits:
-  // medido, el trabajo de un agente entero vivió solo en el árbol de archivos.
-  for (const a of p.agentes) {
-    if (!esRepo(a.repo)) {
+/**
+ * Prepara el repo de UN agente, justo antes de ejecutarlo. Idempotente: si ese repo ya
+ * fue preparado en esta tarea, no hace nada.
+ *
+ * Antes se preparaban todos los repos del proyecto al arrancar, participaran o no: medido,
+ * un repo sucio de otra feature frenaba una tarea que ni siquiera lo tocaba, y el commit
+ * de rescate mezclaba cambios de repos sin relación.
+ */
+function prepararRepoDeAgente(
+  p: ProyectoResuelto,
+  estado: EstadoTarea,
+  feature: string,
+  agenteId: string,
+) {
+  const a = p.agentes.find((x) => x.id === agenteId);
+  if (!a) return;
+
+  if (!esRepo(a.repo)) {
+    if (!estado.avisadosSinRepo?.includes(a.repo)) {
       console.warn(
         `\x1b[33m⚠ "${a.id}" no está en un repositorio git (${a.repo}): su trabajo NO se va a versionar ` +
         `ni commitear. Corré 'git init' ahí antes de seguir.\x1b[0m`,
       );
+      (estado.avisadosSinRepo ??= []).push(a.repo);
     }
+    return;
   }
 
-  const repos = [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo);
+  if (estado.reposParticipantes.includes(a.repo)) return; // ya preparado en esta tarea
 
-  for (const repo of repos) {
-    if (p.git.exigirLimpio && !estaLimpio(repo) && p.git.estrategia === "rama-por-tarea") {
-      throw new Error(`${repo} tiene cambios sin commitear. Limpialo o poné git.exigirLimpio: false.`);
+  if (p.git.estrategia === "rama-por-tarea") {
+    if (p.git.exigirLimpio && !estaLimpio(a.repo)) {
+      throw new Error(`${a.repo} tiene cambios sin commitear. Limpialo o poné git.exigirLimpio: false.`);
     }
-    if (p.git.estrategia === "rama-por-tarea") {
-      const rama = `${p.git.prefijoRama}${feature}`;
-      asegurarRama(repo, rama);
-      estado.ramas[repo] = rama;
-    }
+    const rama = `${p.git.prefijoRama}${feature}`;
+    asegurarRama(a.repo, rama);
+    estado.ramas[a.repo] = rama;
   }
+
+  // Participa aunque no se le cree rama, para que el rescate lo cubra con cualquier estrategia.
+  // Se registra recién acá: si la preparación falló por un repo sucio, esos cambios son ajenos
+  // a la tarea y el rescate no debe commitearlos.
+  estado.reposParticipantes.push(a.repo);
 }
 
 /* ------------------------------ resumen ------------------------------ */
