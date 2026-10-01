@@ -15,6 +15,13 @@ renombrando ni corrompiendo un archivo real de `.orquestador/`. Los casos que no
 se montan con los fixtures de `I-14` (**D-11**). `.orquestador` está en `.gitignore`: lo que se
 rompa ahí no vuelve con `git checkout`.
 
+**Invariante heredada de `I-02`/`I-03`, obligatoria para `I-04`, `I-05` e `I-06`.** Las rutas
+relativas del config (la `raiz: "."` de `interfaz`, y todo lo que cuelga de ella) se resuelven
+contra el `process.cwd()` del momento, así que el servidor corre con el cwd fijado a la raíz del
+repo desde que arranca. Ninguna tarea que siga lo revierte ni lo cambia por llamada. Importa
+sobre todo para `I-06`: el `decisiones.md` sale de la raíz resuelta, y con el cwd equivocado el
+endpoint apunta a otro archivo **sin lanzar ningún error**. Ver D-3.
+
 ---
 
 ## Servidor

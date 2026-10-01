@@ -60,6 +60,20 @@ propio `try`. Un proyecto que explota al cargar aparece en la lista con su error
 los demás cargan normal. Si la raíz resuelta no existe, se marca (`raizExiste: false`) en vez
 de fallar — es el dato útil que pidió **DEC-lectura-02**.
 
+**El cwd es parte del contrato de `cargarProyecto()`** (encontrado al implementar `I-02`/`I-03`).
+`resolver()` resuelve las rutas relativas del config con `path.resolve()` contra `process.cwd()`
+**en el momento en que corre**, no contra la constante `RAIZ_APP` que `src/config.ts` calcula al
+importarse. Como el servidor arranca dentro de `servidor/`, sin corregirlo la `raiz: "."` de
+`interfaz` resuelve a `servidor/` en vez de a la raíz del repo, y todo lo que cuelga de la raíz
+—incluido el `decisiones.md` de `I-06`— sale apuntando al lugar equivocado **sin lanzar ningún
+error**: es un valor plausible y mal, el peor modo de falla.
+
+El servidor fija el cwd a la raíz del repo una sola vez al arrancar, antes de aceptar requests.
+No se toca por llamada: el cwd es estado global del proceso y cambiarlo con requests concurrentes
+en vuelo es una condición de carrera. Dos consecuencias para lo que falta: `I-04`, `I-05` e `I-06`
+heredan la invariante y no la pueden revertir, y cualquier runner que ejecute esas funciones desde
+otro directorio tiene que fijar el mismo cwd o va a leer rutas distintas que el servidor.
+
 ### D-4 · Las fechas salen del historial, no del nombre del archivo
 
 El `tareaId` es `${feature}-${ISO}` (`src/buzon.ts:88`), y como una feature puede tener
@@ -86,6 +100,15 @@ La API nunca lee `process.env` para responder. El único lugar donde un valor de
 colarse es una raíz del config que use `${VAR}` — `expandir()` en `src/config.ts:139` la
 sustituye al resolver. Esa es una ruta de carpeta, se muestra como ruta y es lo que la persona
 necesita ver; no se vuelve a leer la variable ni se expone el `.env`.
+
+**La garantía es "no se lee para responder", no "no está cargado"** (precisado al verificar
+`I-03`). Importar `src/config.ts` ejecuta `process.loadEnvFile()` en su línea 7, así que el
+proceso del servidor **tiene el `.env` del repo cargado en `process.env`** desde el momento en
+que resuelve el primer config. Hoy eso no se filtra —no hay un solo `process.env` en el código
+del servidor, y se verificó que ningún valor del `.env` aparece en ninguna de las respuestas—,
+pero la defensa es que nadie lo lea, no que no esté ahí. Cualquier endpoint de diagnóstico que
+una fase posterior quiera agregar (volcar config, estado del proceso, versión) lo convierte en
+una filtración sin que haga falta cambiar nada más.
 
 ### D-7 · La web no sabe en qué puerto está el servidor
 
@@ -210,7 +233,11 @@ Reglas transversales:
 - "Sin config" y "sin decisiones" **no** son `404`: son respuestas `200` con el dato de que no
   hay (R-05). Un `404` ahí haría que la web los muestre como falla.
 - `RegExp` (`sensibles`, `bashProhibido`) no sobrevive a `JSON.stringify`: se serializa como
-  string antes de responder, o no se expone.
+  string antes de responder, o no se expone. **Rama tomada al implementar `I-03`: no se exponen.**
+  R-02 no los pide, así que la alternativa queda cerrada y la web no tiene que esperarlos. Los dos
+  únicos casos en disco son `sensibles` en `ejemplo-pedidos` y `bashProhibido` en
+  `ejemplo-python-react`; si una fase posterior los quiere mostrar, serializarlos como string es
+  un agregado, no una corrección.
 
 ## Pantallas
 

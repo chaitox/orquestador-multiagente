@@ -51,6 +51,10 @@ Para un proyecto con config se ve su configuración resuelta: raíz, modelo por 
 spec-driven, y por cada agente su id, descripción, carpeta, repo, modelo, lecturas extra,
 comandos de verificación, recursos y contrato.
 
+Esa lista es cerrada, no un "todo el config": los dos campos `RegExp` que el config admite
+—`sensibles` del proyecto y `bashProhibido` del agente— **no se muestran**, y no es una omisión
+por descuido (ver la rama tomada en el Contrato HTTP de [diseño.md](./diseño.md)).
+
 Si la raíz declarada en el config no existe en disco (pasa con los proyectos de ejemplo), se
 dice en pantalla en vez de fallar (**DEC-lectura-02**).
 
