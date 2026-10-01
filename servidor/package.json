@@ -1,0 +1,18 @@
+{
+  "name": "servidor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "API local de solo lectura sobre .orquestador/, proyectos/ y decisiones.md.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "fixtures:montar": "tsx scripts/fixtures.ts montar",
+    "fixtures:borrar": "tsx scripts/fixtures.ts borrar"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
