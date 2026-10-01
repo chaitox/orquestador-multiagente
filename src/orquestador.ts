@@ -19,6 +19,7 @@ import {
   commitTodo,
   esRepo,
   estaLimpio,
+  idCitadoEnCommits,
   MARCA_SIN_VERIFICAR,
   ultimoCommitSinVerificar,
 } from "./git.js";
@@ -60,6 +61,7 @@ export async function ejecutarTarea(p: ProyectoResuelto, o: Opciones): Promise<E
     );
   }
 
+  avisarDependenciasFaltantes(p, o.descripcion);
   prepararRepoDeAgente(p, estado, o.feature, inicial.id);
 
   const cola: Trabajo[] = o.continuar
@@ -443,6 +445,32 @@ function prepararRepoDeAgente(
   // Se registra recién acá: si la preparación falló por un repo sucio, esos cambios son ajenos
   // a la tarea y el rescate no debe commitearlos.
   estado.reposParticipantes.push(a.repo);
+}
+
+/** Ids del tipo T-01, P-07, MI-16, S-13 mencionados después de "depende de" */
+const IDS_DEPENDENCIA = /depende(?:n)? de[^.]*?\b([A-Z]{1,3}-\d{1,3})/gi;
+
+/**
+ * Avisa si la tarea dice depender de ids que no aparecen citados en ningún commit de los
+ * repos del proyecto. No bloquea: puede haber falsos positivos (un id hecho en otra rama,
+ * o citado con otro formato) y la decisión es de la persona.
+ *
+ * Nació de medir: con cuatro features conviviendo, media docena de corridas se gastaron en
+ * que un agente descubriera a mitad de camino que su dependencia no estaba hecha.
+ */
+function avisarDependenciasFaltantes(p: ProyectoResuelto, descripcion: string) {
+  const ids = [...new Set([...descripcion.matchAll(IDS_DEPENDENCIA)].map((m) => m[1].toUpperCase()))];
+  if (ids.length === 0) return;
+
+  const repos = [...new Set(p.agentes.map((a) => a.repo))].filter(esRepo);
+  const faltantes = ids.filter((id) => !repos.some((r) => idCitadoEnCommits(r, id)));
+
+  for (const id of faltantes) {
+    console.warn(
+      `\x1b[33m⚠ la tarea dice depender de ${id}, que no aparece citado en ningún commit. ` +
+      `Verificá que esté hecho antes de avanzar.\x1b[0m`,
+    );
+  }
 }
 
 /* ------------------------------ resumen ------------------------------ */

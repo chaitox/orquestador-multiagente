@@ -125,3 +125,15 @@ export function commitTodo(repo: string, mensaje: string): boolean {
   git(repo, ["commit", "-m", mensaje]);
   return true;
 }
+
+/**
+ * ¿Hay algún commit en este repo cuyo mensaje cite `id`?
+ * Se usa para avisar si una tarea dice depender de algo que no parece estar hecho.
+ */
+export function idCitadoEnCommits(repo: string, id: string): boolean {
+  try {
+    return git(repo, ["log", "--grep", id, "--fixed-strings", "--format=%H", "-1"]) !== "";
+  } catch {
+    return false;
+  }
+}
